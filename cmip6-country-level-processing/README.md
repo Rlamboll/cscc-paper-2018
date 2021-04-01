@@ -1,7 +1,7 @@
 # CMIP6 country-level data processing
 
 This folder contains the notebooks required to do the country-level data processing.
-The method follows [Nicholls et al., *GDJ* 2021](https://doi.org/10.5281/zenodo.4536523), please cite [Nicholls et al., *GDJ* 2021](https://doi.org/10.5281/zenodo.4536523) if you use any country-level data in your own work.
+The method follows [Nicholls et al., *GDJ* 2021](https://doi.org/10.1002/gdj3.113), please cite [Nicholls et al., *GDJ* 2021](https://doi.org/10.1002/gdj3.113) if you use any country-level data in your own work.
 We use weights from the 50m scale from [Natural Earth](https://www.naturalearthdata.com/) (see also [here](https://netcdf-scm.readthedocs.io/en/v2.1.0/weights.html#netcdf_scm.weights.get_natural_earth_50m_scale_region_weights)).
 
 Please contact Zebedee Nicholls <zebedee.nicholls@climate-energy-college.org> with any issues (or raise an issue in this github repository and tag @znicholls).
