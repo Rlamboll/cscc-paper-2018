@@ -13,6 +13,7 @@ dependencies:
   - pymagicc==2.0.0
   - scmdata==0.9.1
   - seaborn==0.11.1
+  - xarray<0.17
   - pytables==3.6.1
   - pip:
     - nbdime==2.1.0

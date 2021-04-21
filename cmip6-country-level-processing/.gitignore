@@ -1,3 +1,4 @@
+*.feather
 *.jsonl
 *.nc
 *log*
