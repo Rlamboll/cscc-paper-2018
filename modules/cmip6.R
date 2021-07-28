@@ -1,10 +1,10 @@
-# This takes a while to run, so after the first time we save the results and 
-# load them if they exist
+# This takes a while to run (and sometimes freezes on loading files), so after the 
+# first run we save the results and load them if they exist
 
 saveloc = "./data/cmip6/all_ctemp_calced.Rdata"
-if(file.exists(saveloc)){
-  
-} else{
+#if(file.exists(saveloc)){
+#  load(saveloc)
+#} else{
   library(arrow)
   library(data.table)
   library(dplyr)
@@ -36,7 +36,6 @@ if(file.exists(saveloc)){
     countrypref = 'Popn weighted World\\|Natural Earth 50m\\|'
     desiredCols = c(colnames(temp)[1:11], sapply(c(1980:2105), toString))
     temp2 = as.data.table(temp[, desiredCols])
-    print("File reordered")
     ctemp = melt(temp2, id.vars=c("region", "scenario", "climate_model"), measure.vars=paste(1980:2105),
                  variable.name="year",value.name="temperature",
                  variable.factor = F)
@@ -115,4 +114,4 @@ if(file.exists(saveloc)){
   basetemp = ctemp[year>1979 & year<2011,.(temp=mean(temp)),by=c("ISO3")]
   basetemp = basetemp[,list(ISO3,basetemp=temp)]
   save.image(saveloc)
-}
+#}
