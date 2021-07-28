@@ -2,9 +2,9 @@
 # first run we save the results and load them if they exist
 
 saveloc = "./data/cmip6/all_ctemp_calced.Rdata"
-#if(file.exists(saveloc)){
-#  load(saveloc)
-#} else{
+if(file.exists(saveloc)){
+  load(saveloc)
+} else{
   library(arrow)
   library(data.table)
   library(dplyr)
@@ -114,4 +114,4 @@ saveloc = "./data/cmip6/all_ctemp_calced.Rdata"
   basetemp = ctemp[year>1979 & year<2011,.(temp=mean(temp)),by=c("ISO3")]
   basetemp = basetemp[,list(ISO3,basetemp=temp)]
   save.image(saveloc)
-#}
+}
