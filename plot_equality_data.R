@@ -25,7 +25,7 @@ options:
     (if additional data has been imported). Separate these options by commas)' -> my_doc
 
 #my_opts <- docopt(my_doc, "-e 1 -v v4 -t poor_pref_10dollars -r 6.0,4.5,8.5 -f bhm") # Default case
-my_opts <- docopt(my_doc, "-e 1,2 -t poor_pref_10dollars -v nicedice_v4 -r all -s all -f bhm,dice,djo,nice") 
+my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -v nicedice_v4 -r all -s all -f bhm,dice,djo,nice") 
 #my_opts <- docopt(my_doc, "-e 1 -t poor_pref_10dollars -r 8.5 -s 3 -f dice") 
 #my_opts <- docopt(my_doc, "-e 1,2 -t poor_pref_10dollars -r all -s all -f bhm,djo,dice") 
 #my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -r all -s all -f bhm,djo,dice") 
@@ -196,19 +196,25 @@ if (type_str == "poor_pref_10dollars"){
   compare_results$value = compare_results$value * dollar_val_2020  
 }
 if (grepl("nice", dmg_f)){
-  nice_data <- read.csv("./data/nice_imports/interpolated_scc_scenarios_v4_2025.csv")
+  nice_data <- read.csv("./data/nice_imports/interpolated_scc_scenarios_v5_2025.csv")
   nice_data$ssp = substr(nice_data$Scenario, 4, 4)
   nice_data$rcp = sapply(nice_data$Scenario, function(x) strsplit(x, "-")[[1]][2])
   nice_data$rcp[nice_data$rcp=="Baseline"] = "85"
+  # Put decimal point in
+  nice_data$rcp = sapply(nice_data$rcp, function(x) {paste0(substr(x, 1, 1), ".", substr(x, 2,3))})
   nice_data_poor = nice_data[nice_data$whose=="poorest", ]
   len_nice = nrow(nice_data_poor)
+  # Mute warnings for constructing a table mostly of NAs. 
+  options(warn = -1)
   nice_results_table <- data.table(
     ssp=integer(), rcp=numeric(), eta=numeric(), PRTP=numeric(), damages=rep("NICE", len_nice), 
     indicator=rep("mean", len_nice), value=numeric())
+  options(warn=0)
   nice_results_table$ssp = nice_data_poor$ssp
   nice_results_table$rcp = nice_data_poor$rcp
   nice_results_table$PRTP = as.integer(nice_data_poor$prtp * 100)
   nice_results_table$eta = nice_data_poor$eta
+  # We will start with the scc and transform it into the value we want
   nice_results_table$value = nice_data_poor$scc
   if (type_str == "poor_pref_10dollars") {
     # The post-abatement cost, post-damages income of the poorest group in the NICE model in 2025.
@@ -264,7 +270,7 @@ if (!dir.exists(file.path(subDir))){
 savefig = paste0(type_str, version_string, ".png")
 ggsave(path="plots", filename=savefig)
 
-if (type_str == "eri_eq_statscc_2020d"){
+if (type_str == "eri_eq_statscc_2020d" & !(grepl("nice", dmg_f))){
   combined_data = results_table
   combined_data$ratio = compare_results$value / results_table$value
   combined_data$no_ineq = compare_results$value
