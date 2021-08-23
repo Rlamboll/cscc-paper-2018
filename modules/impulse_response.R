@@ -4,10 +4,24 @@ library(countrycode)
 library(foreach)
 library(stringr)
 
-files <- Sys.glob("data/pulse/RegionalSCC_pulseuncertainty/*.csv")
+# if doing a test:
+if (test == TRUE) {
+  if ((test_opt == "t1") & (!dir.exists("data/cmip5/RegionalSCC_rcpfits_t1"))){
+    source("modules/generate_test_pulse_input.R")
+  } else if ((test_opt == "t0") & (!dir.exists("data/cmip5/RegionalSCC_rcpfits_t0"))){
+    source("modules/generate_test_pulse_input.R")
+  }
+}
 
-all_pulse = foreach(f=files) %do% {
+if (test == TRUE){
+  if (test_opt == "t0"){
+    files <- Sys.glob("data/pulse/RegionalSCC_pulseuncertainty_t0/*.csv")
+  } else if (test_opt == "t1"){
+    files <- Sys.glob("data/pulse/RegionalSCC_pulseuncertainty_t1/*.csv")
+  }
+} else {files <- Sys.glob("data/pulse/RegionalSCC_pulseuncertainty/*.csv")}  
   
+all_pulse = foreach(f=files) %do% {
   # Load sample temp from one model [temperatures have to be adjusted to baseline]
   pulse = fread(input = f, header = T)
   pulse = melt(pulse, id.vars = c("FAO", "Country", "C Model"), 
@@ -60,4 +74,3 @@ cpulse = cpulse[,list(model,ccmodel,ISO3,mid_year,temp_pulse)]
 setkey(cpulse,ISO3,mid_year)
 
 epulse = cpulse[,list(temp_pulse=mean(temp_pulse)), by=c("mid_year","ISO3")]
-
