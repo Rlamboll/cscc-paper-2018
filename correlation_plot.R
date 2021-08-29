@@ -1,8 +1,16 @@
+# This file generates a plot that displays the relationship between damages to GDP for the global
+# temperature change and the summed damages to GDP for temperature change per country.
+
+# the output is a plot that will show a linear relationship, for which a coefficient can be calculated.
+# damage = gdp_w * a_w * (T_w – T_w(0))^2 = \sum a_c * gdp_c * (T_c-T_c(0))^2
+# for a_w, the coefficient of the warming function of DICE-2016R is used which is 0.00236
+# a_c will be determined in this file.
+
 library(data.table)
 library(dplyr)
 
-temp_countries <- fread(file.path('data/CMIP6_temp_countries.csv'))
-temp_global <- fread(file.path('data/CMIP6_temp_global.csv'))
+temp_countries <- fread(file.path('data/cmip6/CMIP6_temp_countries.csv'))
+temp_global <- fread(file.path('data/cmip6/CMIP6_temp_global.csv'))
 
 # separate ssp from rcp
 temp_countries$ssp = substring(temp_countries$rcp, 1,1)
@@ -60,7 +68,7 @@ gdp_yearly <- rbind(gdp_1900_table,gdp_yearly,fill = TRUE)
 gdp_yearly <- gdp_yearly[order(gdp_yearly$ISO3),]
 w_gdp = gdp_yearly[, .(gdp=sum(gdp)), by = c("year", "ssp")]
 
-# combine datatables with gdps from 1900-2000 with 2001-2100
+# combine datatables with gdp's from 1900-2000 with 2001-2100
 temp_w_1900 <- temp_global[year < 2001]
 temp_w_1900 <- temp_w_1900 %>% left_join(w_gdp, by = "year")
 temp_w_2001 <- temp_global[year > 2000]
@@ -92,7 +100,8 @@ tempandgdp_countries <- tempandgdp_countries[!is.na(tempandgdp_countries$temp)]
 # coefficient, a, is being determined later
 country_damages <- tempandgdp_countries[, damages := gdp * (temp-basetemp)^2]
 
-# global warming effect: damages = gdp * damcoeff. damcoeff = 0.00236*(temp - basetemp)**2 
+# global warming effect: damages = gdp * damcoeff. damcoeff = 0.00236*(temp - basetemp)**2
+# a_w = 0.00236, based on the DICE-2016R
 global_damages <- tempandgdp_global[, global_damages := gdp * 0.00236 * (temp-basetemp)^2]
 global_damages <- global_damages %>% select(year, rcp, model, ssp, global_damages)
 
@@ -112,3 +121,5 @@ anova(linear_model)
 
 summary(linear_model)
 # beta coefficient: 0.001796, intercept: -7.159
+
+# so the relationship is, damage = gdp_w * 0.00236 * (T_w – T_w(0))^2 = \sum 0.001796 * gdp_c * (T_c-T_c(0))^2
