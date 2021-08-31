@@ -1,8 +1,8 @@
 # This file generates a plot that displays the relationship between damages to GDP for the global
 # temperature change and the summed damages to GDP for temperature change per country.
 
-# the output is a plot that will show a linear relationship, for which a coefficient can be calculated.
-# damage = gdp_w * a_w * (T_w – T_w(0))^2 = \sum a_c * gdp_c * (T_c-T_c(0))^2
+# the output is a plot that will show a linear relationship, for which a coefficient can be 
+# calculated by: damage = gdp_w * a_w * (T_w – T_w(0))^2 = \sum a_c * gdp_c * (T_c-T_c(0))^2
 # for a_w, the coefficient of the warming function of DICE-2016R is used which is 0.00236
 # a_c will be determined in this file.
 
@@ -26,7 +26,8 @@ gdp_yearly$ssp = substring(gdp_yearly$SSP, 4,4)
 gdp_yearly$SSP <- NULL
 
 # load GDPs from 1900 - 2000 in 2005 PPP USD
-# from Geiger, T ; Frieler, K. (2017): Continuous GDP time series for 195 countries: from 1850 to the Shared Socioeconomic Pathways. GFZ Data Services, http://doi.org/19.5880/pik.2017.003		
+# from Geiger, T ; Frieler, K. (2017): Continuous GDP time series for 195 countries: from 1850
+# to the Shared Socioeconomic Pathways. GFZ Data Services, http://doi.org/19.5880/pik.2017.003		
 gdp_csv = file.path('data','GDP-national-PPP2005_SSP-harmonized_1850-2009.csv')
 gdp_19002020 = fread(gdp_csv, header = T)
 gdp_1900 <- transpose(gdp_19002020, keep.names = "year")
@@ -82,7 +83,8 @@ tempgdp_1900 <- tempandgdp_global[year == 1900]
 tempgdp_1900 <- select(tempgdp_1900, model, ssp, rcp, temp)
 tempgdp_1900 <- tempgdp_1900 %>% rename(basetemp = temp)
 tempgdp_1900 <- tempgdp_1900 %>% distinct(model, rcp, ssp, .keep_all = TRUE)
-tempandgdp_global <-  tempandgdp_global %>% distinct(model, rcp, ssp, year, .keep_all = TRUE)
+tempandgdp_global <-  tempandgdp_global %>% distinct(model, rcp, ssp, year, 
+                                                     .keep_all = TRUE)
 tempandgdp_global <- tempandgdp_global %>% right_join(tempgdp_1900) 
 tempandgdp_global <- tempandgdp_global[!is.na(tempandgdp_global$temp)]
 
@@ -91,7 +93,8 @@ basetemp_countries <- tempandgdp_countries[year == 1900]
 basetemp_countries <- select(basetemp_countries, model, ssp, rcp, ISO3, temp)
 basetemp_countries <- basetemp_countries %>% rename(basetemp = temp)
 basetemp_countries <- basetemp_countries %>% distinct(model, rcp, ssp, ISO3, .keep_all = TRUE)
-tempandgdp_countries <-  tempandgdp_countries %>% distinct(model, rcp, ssp, year, ISO3, .keep_all = TRUE)
+tempandgdp_countries <-  tempandgdp_countries %>% distinct(model, rcp, ssp, year, ISO3, 
+                                                           .keep_all = TRUE)
 tempandgdp_countries <- tempandgdp_countries %>% right_join(basetemp_countries)
 tempandgdp_countries <- tempandgdp_countries[!is.na(tempandgdp_countries$temp)]
 
@@ -107,13 +110,17 @@ global_damages <- global_damages %>% select(year, rcp, model, ssp, global_damage
 
 # Damage = gdp_w * a_w * (T_w – T_w(0))^2 = \sum a_c * gdp_c * (T_c-T_c(0))^2
 # sum country damages for each model and rcp in each year
-summed_damages <- country_damages %>% group_by(year, rcp, model, ssp) %>% summarize(country_damages = sum(damages, na.rm=T), gdp = sum(gdp, na.rm = T))
+summed_damages <- country_damages %>% group_by(year, rcp, model, ssp) %>% 
+  summarize(country_damages = sum(damages, na.rm=T), gdp = sum(gdp, na.rm = T))
 
 damage_table <- summed_damages %>% left_join(global_damages, by = c("year", "rcp", "ssp", "model"))
 
-plot(damage_table$country_damages, damage_table$global_damages, xlab = "Damages to country GDP (billions of 2005 USD)", 
-     ylab = "Damages to global GDP (billions of 2005 USD)", main = "Correlation of damages: Global GDP to country GDP")
-abline(lm(damage_table$global_damages ~ damage_table$country_damages, data = damage_table), col = "blue")
+plot(damage_table$country_damages, damage_table$global_damages, 
+     xlab = "Damages to country GDP without coefficient (billions of 2005 USD)", 
+     ylab = "Damages to global GDP (billions of 2005 USD)", 
+     main = "Correlation of damages: Global GDP to country GDP")
+abline(lm(damage_table$global_damages ~ damage_table$country_damages, data = damage_table), 
+       col = "blue")
 
 
 linear_model = lm(damage_table$global_damages ~ damage_table$country_damages, data = damage_table)
@@ -122,4 +129,5 @@ anova(linear_model)
 summary(linear_model)
 # beta coefficient: 0.001796, intercept: -7.159
 
-# so the relationship is, damage = gdp_w * 0.00236 * (T_w – T_w(0))^2 = \sum 0.001796 * gdp_c * (T_c-T_c(0))^2
+# so the relationship between the damage to GDP of the world to countries is:
+# damage = gdp_w * 0.00236 * (T_w – T_w(0))^2 = \sum 0.001796 * gdp_c * (T_c-T_c(0))^2
