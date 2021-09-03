@@ -31,15 +31,18 @@ generate_test = TRUE
 source("generate_cscc.R")
 
 if (opts["-f"] == "bhm"){
-  # derived from gdpcap_imp = gdpcap * (gdpr + gdpr_damage_imp) and gdpcap_cc = gdpcap * (gdpr - gdpr_damage_cc)
-  # -(gdpcap_imp - gdpcap_cc) * pop * 1 (= 1e6/pulse_scale) and then discounting by 1/(1 + prtp/100 + eta * gdprate_cc_avg)^1
+  # derived from gdpcap_imp = gdpcap * (gdpr + gdpr_damage_imp) 
+  # and gdpcap_cc = gdpcap * (gdpr - gdpr_damage_cc)
+  # -(gdpcap_imp - gdpcap_cc) * pop * 1 (= 1e6/pulse_scale) 
+  # then discounting by 1/(1 + prtp/100 + eta * gdprate_cc_avg)^1
   value = 0.08361
 } else if (opts["-f"] == "dice"){
   # derived from -(gdp * (damage_coeff_imp - damage_coeff_cc)) * 1e6/pulse_scale and then discounting
   test_temp_dif = 1e-3 / 44 * 12 * (pulse_scale * 1e-9)
   GDPval_ago = ssp_gdp[SSP=="SSP1"&ISO3=="AGO"&year==2021]$gdp[1]
   # GDP is in billions so add factor of 1e9. Discount by 1 year. 
-  value = 0.00236 * ((test_temp_dif + temp_history) ** 2 - temp_history**2) * GDPval_ago * 1e9/pulse_scale / (1 + 0.025)
+  value = 0.00236 * ((test_temp_dif + temp_history) ** 2 - temp_history**2) * 
+    GDPval_ago * 1e9/pulse_scale / (1 + 0.025)
 } else { 
   # derived from gdpcap_imp = gdpcap * (gdpr + gdpr_damage_imp) and gdpcap_cc = gdpcap * (gdpr - gdpr_damage_cc)
   # -(gdpcap_imp - gdpcap_cc) * pop and then discounting 
@@ -50,17 +53,20 @@ if (opts["-f"] == "bhm"){
 if (test_opt == "t0") {
   for (i in 1:nrow(cscc)){
     if (cscc[[1]][i] != 0){
-      raise_error[[(length(raise_error) + 1)]] <- i # append the row number to list to know where error occurred
+      # append the row number to list to know where error occurred
+      raise_error[[(length(raise_error) + 1)]] <- i 
     }
   }
 } else if (test_opt == "t1"){
   raise_error = list()
   for (i in 1:nrow(cscc)){
     if ((cscc[[1]][i] != 0) & (grepl("AGO",cscc[[2]][i]) == FALSE)){
-      raise_error[[(length(raise_error) + 1)]] <- i # append the row number to list to know where error occurred
+      # append the row number to list to know where error occurred
+      raise_error[[(length(raise_error) + 1)]] <- i 
     }
     if (grepl("AGO",cscc[[2]][i])){
-      if (!(cscc$scc[2] < (value + 1e-10) & (cscc$scc[2] > (value - 1e-10)))){ # answer should be around value, with 1e-10 for computational error
+      # answer should be around value, with 1e-10 for computational error
+      if (!(cscc$scc[2] < (value + 1e-10) & (cscc$scc[2] > (value - 1e-10)))){ 
         raise_error[[(length(raise_error) + 1)]] <- i # append the row number to list 
       }
     }

@@ -22,8 +22,9 @@ temp_global <- temp_global[year < 2101]
 
 # load GDP from 2001 for all SSP scenarios
 source('modules/gdpssp.R')
-gdp_yearly$ssp = substring(gdp_yearly$SSP, 4,4)
-gdp_yearly$SSP <- NULL
+gdp_year <- gdp_yearly
+gdp_year$ssp = substring(gdp_year$SSP, 4,4)
+gdp_year$SSP <- NULL
 
 # load GDPs from 1900 - 2000 in 2005 PPP USD
 # from Geiger, T ; Frieler, K. (2017): Continuous GDP time series for 195 countries: from 1850
@@ -34,7 +35,8 @@ gdp_1900 <- transpose(gdp_19002020, keep.names = "year")
 names(gdp_1900) <- as.matrix(gdp_1900[1, ])
 gdp_1900 <- gdp_1900[-1, ]
 colnames(gdp_1900)[1] <- "year"
-gdp_1900 <- gdp_1900[year > 1899 & year < 2001]
+# Load until 2001 to allow for calculating rates until 2001
+gdp_1900 <- gdp_1900[year > 1899 & year < 2002]
 
 gdp_1900_table <- data.table(ISO3=character(), year=numeric(), gdp=numeric())
 gdp_1900_table$year <- gdp_1900$year
@@ -51,53 +53,54 @@ for (i in (2 : (ncol(gdp_1900))-1)){
   gdp_1900_table <- rbind(gdp_1900_table,gdp_datatable)
 }
 
-# convert USD to billions of USD to match magnitude of the gdp_yearly
+# convert USD to billions of USD to match magnitude of the gdp_year
 gdp_1900_table <- gdp_1900_table[, gdp := gdp/1e9] 
 gdp_1900_table <- gdp_1900_table[!is.na(gdp)]
+# remove date from 2001 to bind the list with the other data from 2000
+gdp_1900_2000_table <- gdp_1900_table[year < 2001]
 
-# combine gdp_yearly and gdp_1900 to get full record of GDPs from 1900 - 2100
+# combine gdp_year and gdp_1900 to get full record of GDPs from 1900 - 2100
 # use 1900 as starting point
 temp_c_1900 <- temp_countries[year < 2001]
-temp_c_1900 <- temp_c_1900 %>% left_join(gdp_1900_table)
+temp_c_1900 <- temp_c_1900 %>% left_join(gdp_1900_2000_table)
 temp_c_2001 <- temp_countries[year > 2000]
-temp_c_2001 <- temp_c_2001 %>% left_join(gdp_yearly)
-tempandgdp_countries <- rbind(temp_c_1900, temp_c_2001)
-tempandgdp_countries <- tempandgdp_countries[order(tempandgdp_countries$ISO3),]
+temp_c_2001 <- temp_c_2001 %>% left_join(gdp_year)
+tempcountries <- rbind(temp_c_1900, temp_c_2001)
+tempcountries <- tempcountries[order(tempcountries$ISO3),]
 
-# use gdp_yearly and sum gdp's up
-gdp_yearly <- rbind(gdp_1900_table,gdp_yearly,fill = TRUE)
-gdp_yearly <- gdp_yearly[order(gdp_yearly$ISO3),]
-w_gdp = gdp_yearly[, .(gdp=sum(gdp)), by = c("year", "ssp")]
+# use gdp_year and sum gdp's up
+gdp_year <- rbind(gdp_1900_2000_table,gdp_year,fill = TRUE)
+gdp_year <- gdp_year[order(gdp_year$ISO3),]
+w_gdp = gdp_year[, .(gdp=sum(gdp)), by = c("year", "ssp")]
 
 # combine datatables with gdp's from 1900-2000 with 2001-2100
 temp_w_1900 <- temp_global[year < 2001]
 temp_w_1900 <- temp_w_1900 %>% left_join(w_gdp, by = "year")
 temp_w_2001 <- temp_global[year > 2000]
 temp_w_2001 <- temp_w_2001 %>% left_join(w_gdp)
-tempandgdp_global <- rbind(temp_w_1900, temp_w_2001, by = "ISO3", fill = TRUE)
-tempandgdp_global <- tempandgdp_global %>% mutate(ssp = coalesce(ssp,ssp.x)) %>%
+tempglobal <- rbind(temp_w_1900, temp_w_2001, by = "ISO3", fill = TRUE)
+tempglobal <- tempglobal %>% mutate(ssp = coalesce(ssp,ssp.x)) %>%
   select(V1, model, ssp, rcp, year, temp, gdp)
 
 # basetemps per model and scenario for global dataset
-tempgdp_1900 <- tempandgdp_global[year == 1900]
+tempgdp_1900 <- tempglobal[year == 1900]
 tempgdp_1900 <- select(tempgdp_1900, model, ssp, rcp, temp)
 tempgdp_1900 <- tempgdp_1900 %>% rename(basetemp = temp)
 tempgdp_1900 <- tempgdp_1900 %>% distinct(model, rcp, ssp, .keep_all = TRUE)
-tempandgdp_global <-  tempandgdp_global %>% distinct(model, rcp, ssp, year, 
+tempandgdp_global <-  tempglobal %>% distinct(model, rcp, ssp, year, 
                                                      .keep_all = TRUE)
 tempandgdp_global <- tempandgdp_global %>% right_join(tempgdp_1900) 
 tempandgdp_global <- tempandgdp_global[!is.na(tempandgdp_global$temp)]
 
 # basetemps per model and scenario for country dataset
-basetemp_countries <- tempandgdp_countries[year == 1900]
+basetemp_countries <- temp_countries[year == 1900]
 basetemp_countries <- select(basetemp_countries, model, ssp, rcp, ISO3, temp)
 basetemp_countries <- basetemp_countries %>% rename(basetemp = temp)
 basetemp_countries <- basetemp_countries %>% distinct(model, rcp, ssp, ISO3, .keep_all = TRUE)
-tempandgdp_countries <-  tempandgdp_countries %>% distinct(model, rcp, ssp, year, ISO3, 
+tempandgdp_countries <-  tempcountries %>% distinct(model, rcp, ssp, year, ISO3, 
                                                            .keep_all = TRUE)
 tempandgdp_countries <- tempandgdp_countries %>% right_join(basetemp_countries)
 tempandgdp_countries <- tempandgdp_countries[!is.na(tempandgdp_countries$temp)]
-
 
 # warming effect: damages = gdp * damcoeff. damcoeff = a * (temp - basetemp)**2
 # coefficient, a, is being determined later

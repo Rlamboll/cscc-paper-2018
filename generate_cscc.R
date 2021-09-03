@@ -19,7 +19,7 @@ options:
  -o         does not allow for out-of-sample damage prediction (default, allows)
  -d         rich/poor damage function specification (default, pooled)
  -a         5-lag damage function specification (default, 0-lag)
- -f <name>  damage function (default=bhm (Burke et al.), djo (Dell et al.)), dice (Nordhaus)
+ -f <name>  damage function (default=bhm (Burke et al.), djo (Dell et al.)), dice (Nordhaus), c_dice
  -t <opt>   allows for generating tests with different temperature input. t0 (zero temp change) or t1 (1 degree for one year in one country)
  -w         save raw data' -> doc
 
@@ -28,7 +28,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s SSP3 -c rcp85 -t t1 -e 1 -f dice") # Default case
+  opts <- docopt(doc, "-s SSP2 -c rcp45 -e 1 -f c_dice") # Default case
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -163,11 +163,14 @@ for (.rcp in rcps){
       source("modules/bhm_replica.R")
     } else if (dmg_ref == "_dice"){
       source("modules/dice_replica.R")
+    }  else if (dmg_ref == "_c_dice"){
+        source("modules/c_dice_replica.r")
     } else {
       source("modules/djo_replica.R")
     }
     
     source("modules/cmip5.R")
+    source("modules/cmip6.R")
     source("modules/impulse_response.R")
     print(Sys.time() - t0)
     
@@ -179,7 +182,7 @@ for (.rcp in rcps){
     
     # Future years
     fyears <- impulse_year:2100
-    
+    #if (dmg_ref == "_c_dice"){fyears <- 1900:2100}
     # Impulse year
     cpulse[,year := mid_year - 0.5 + fyears[1]]
     epulse[,year := mid_year - 0.5 + fyears[1]]
@@ -314,6 +317,7 @@ for (.rcp in rcps){
                   gdp_damages_imp = .gdp_damages_imp,
                   gdprate_cc = .gdprate_cc
       ))
+      
     }
     
     lcscc = NULL
@@ -333,13 +337,26 @@ for (.rcp in rcps){
       } else {
         ssp_temp <- etemp[rcp == .rcp & year %in% fyears]
       }
-      ssp_temp = merge(ssp_temp,basetemp,by = c("ISO3")) # add basetemp
-      ssp_gdpr <- merge(ssp_gr,ssp_temp,by = c("ISO3","year")) # merge growth rate and temp
-      ssp_gdpr = merge(ssp_gdpr, sspgdpcap[SSP == ssp & year == fyears[1]],
-                       by = c("SSP","ISO3","year"),all.x = T) # add gdpcap0
+      # merge gdp for each year for the c_DICE damage function
+      # also merge temperature at 1900 that will be the base temperature
+      if (dmg_ref == "_c_dice"){
+        ssp_temp <- ssp_temp %>% left_join(basetemp_countries, by = c("model", "rcp", 
+                                                                      "SSP", "ISO3"))
+        sspgdp <- gdp_yearly[year %in% fyears]
+        sspgdp <- ssp_temp %>% left_join(sspgdp)
+        names(sspgdp)[names(sspgdp) == 'gdp'] <- 'gdpcap'
+        ssp_gdpr <- sspgdp %>% left_join(ssp_gr, by = c("SSP", "ISO3", "year"))
+      # merge gdp growth rate and basetemp for the other damage functions
+      } else {
+        ssp_temp = merge(ssp_temp,basetemp,by = c("ISO3")) # add basetemp
+        ssp_gdpr <- merge(ssp_gr,ssp_temp,by = c("ISO3","year")) # merge growth rate and temp
+        ssp_gdpr = merge(ssp_gdpr, sspgdpcap[SSP == ssp & year == fyears[1]],
+                         by = c("SSP","ISO3","year"),all.x = T) # add gdpcap0
+        }
+      }
       if (clim == "ensemble") {
         ssp_gdpr = merge(cpulse[model %in% ssp_cmip5_models_temp & year %in% fyears],
-                         ssp_gdpr, by = c("ISO3","year","model"), all.x = T) 
+                       ssp_gdpr, by = c("ISO3","year","model"), all.x = T)
         ssp_gdpr[,model_id := paste(model,ccmodel)]
       }else{
         ssp_gdpr = merge(epulse[year %in% fyears],
@@ -347,7 +364,7 @@ for (.rcp in rcps){
       }
       miss_val_iso3 <- unique(ssp_gdpr[year == impulse_year & is.na(gdpcap),ISO3])
       ssp_gdpr <- ssp_gdpr[!ISO3 %in% miss_val_iso3]
-
+      
       if (clim == "ensemble") {
         # keep only model combination
         model_comb[,model_id := paste(model,ccmodel)]
@@ -359,14 +376,15 @@ for (.rcp in rcps){
       ssp_gdpr[,temp_pulse := temp + temp_pulse * 1e-3 / 44 * 12 * (pulse_scale * 1e-9)]
       setkey(ssp_gdpr,model_id,ISO3)
       print(Sys.time() - t0)
-
+    
+      # yearly population
+      popyear <- pop[SSP == ssp,approx(year,pop,fyears),by = c("SSP","ISO3")] # population in millions
       if (dmg_ref == "_dice") {
         ssp_gdp <- gdp_yearly[SSP == ssp & year %in% fyears] # gdp in billions of USD
         ssp_gdp <- merge(ssp_gdpr, ssp_gdp, by = c("year","ISO3"))
         res_sccdice <- ssp_gdp[,project_gdpcap_cc_dice(.SD),by = c("model_id","ISO3")]
 
-        # generating gdp cap by dividing through population
-        popyear <- pop[SSP == ssp,approx(year,pop,fyears), by = c("SSP","ISO3")] # population in millions
+        # generating gdp per capita by dividing through population
         colnames(popyear) <- c("SSP", "ISO3", "year", "pop")
         
         # converting GDP and GDP damges to gdp per capitan and damages per capita
@@ -378,10 +396,46 @@ for (.rcp in rcps){
         gdpcap_yearly[, gdpcap_imp := gdpcap_imp/pop*1e3]
         res_scc <- setcolorder(gdpcap_yearly, 
           c("ISO3", "year", "model_id","gdpcap", "gdpcap_cc", "gdpcap_imp","gdprate_cc", "gdp_damages_cc","gdp_damages_imp", "SSP", "pop"))
+      } else if (dmg_ref == "_c_dice") {
+        ssp_gdpr <- ssp_gdpr[!is.na(temp) & !is.na(gdpcap)]
+        res_scc <- ssp_gdpr[, gdp_damages_cc := gdpcap * 0.001796 * (temp - basetemp)^2]
+        res_scc <- res_scc[, gdpcap_cc := gdpcap - gdp_damages_cc]
+        #res_scc <- ssp_gdpr[, gdp_damages_imp := gdpcap * 0.001796 * (temp_pulse - basetemp)^2]
+        #res_scc <- res_scc[, gdpcap_imp := gdpcap - gdp_damages_imp]
+        colnames(popyear) <- c("SSP", "ISO3", "year", "pop")
+        
+        # calculate growth rate for cc
+        annual_gdpr <- function(sd){
+          .model <- sd$model
+          .gdprate_cc <- rep(NA, length(sd$gdpcap_cc))
+          .gdp_damages_cc <- sd$gdp_damages_cc
+          .gdprate_cc[1] <- sd$gdpr[1]
+          for (i in seq_along(c(fyears))){
+            if (i > 1){
+              .gdprate_cc[i] <- (.gdp_damages_cc[i] / .gdp_damages_cc[i-1]) - 1
+            }
+          }
+          return(list(year = fyears, gdprate_cc = .gdprate_cc, model= .model))
+        }
+        
+        gdprate <- res_scc[order(res_scc$model), ]
+        gdprate <- gdprate[, annual_gdpr(.SD), by = c("SSP","ISO3")]
+        res_scc <- res_scc %>% left_join(gdprate)
+        
+        # converting GDP and GDP damages to gdp per capita and damages per capita
+        res_scc <- merge(popyear, res_scc, by = c("ISO3","year", "SSP"))
+        res_scc[, gdpcap := gdpcap/pop*1e3] # as gdp is in billions but population in millions, do *1e3 to get dollars
+        res_scc[, gdp_damages_cc := gdp_damages_cc/pop*1e3]
+        res_scc[, gdpcap_cc := gdpcap_cc/pop*1e3]
+        #res_scc[, gdp_damages_imp := gdp_damages_imp/pop*1e3]
+        #res_scc[, gdpcap_imp := gdpcap_imp/pop*1e3]
+        names(res_scc)[names(res_scc) == 'model'] <- 'model_id'
+        res_scc <- select(res_scc, 
+                               c("ISO3", "year", "model_id","gdpcap", "gdpcap_cc", "gdp_damages_cc", "gdprate_cc", "SSP", "pop"))
+        #res_scc <- setcolorder(res_scc, 
+              #                 c("ISO3", "year", "model_id","gdpcap", "gdpcap_cc", "gdpcap_imp","gdprate_cc", "gdp_damages_cc","gdp_damages_imp", "SSP", "pop"))
       } else {
         res_scc <- ssp_gdpr[,project_gdpcap(.SD),by = c("model_id","ISO3")]
-        # yearly population
-        popyear <- pop[SSP == ssp,approx(year,pop,fyears),by = c("SSP","ISO3")]
         setnames(popyear,c("x","y"),c("year","pop"))
         res_scc <- merge(res_scc,popyear,by = c("ISO3","year"))
         print(Sys.time() - t0)
@@ -393,7 +447,7 @@ for (.rcp in rcps){
 
       # Compute average annual growth rate of per capita consumption between now and year t
       # for the computation of discount factor
-      #countries
+      # countries
       gdprate_cc_impulse_year = res_scc[year == impulse_year,
                                         .(gdpcap_cc_impulse_year = gdpcap_cc),
                                         by = c("model_id","ISO3")]

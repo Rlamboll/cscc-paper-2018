@@ -20,12 +20,10 @@ sspdb[, Country := countrycode(ISO3, "iso3c", "country.name")]
 sspdb[, SSP := str_extract(SCENARIO,"SSP\\d")]
 
 # Load gdp and population
-
 gdp = sspdb[VARIABLE %in% c("GDP|PPP"), .(SSP,ISO3,year,gdp=value)]
 pop = sspdb[VARIABLE %in% c("Population"), .(SSP,ISO3,year,pop = value)]
 
 # Compute gdp per capita
-
 gdpcap = merge(gdp,pop,by = c("ISO3","year","SSP"))
 gdpcap[, gdpcap := gdp/pop*1e3]
 sspgdpcap = gdpcap[,list(SSP,ISO3,year,gdpcap)]
@@ -39,12 +37,24 @@ annual_gdpg <- function(sd){
   return(list(year = g_years[2:(length(g_years))],gdpr = gdpg))
 }
 
+# Compute interpolation of gdp
 annual_gdp <- function(sd){
   g_years <- seq(sd$year[1], sd$year[length(sd$year)], by = 1)
   annual_gdp <- approx(sd$year, sd$gdp, g_years)$y
   annual_gdp <- interp1(sd$year, sd$gdp, g_years, method = "spline")
   gdp <- annual_gdp[2:(length(g_years))]
   return(list(year = g_years[2:(length(g_years))],gdp = gdp))
+}
+
+# Compute annual growth rate from 1900 using data from correlation_plot file
+# This function will be called in the generate_cscc file
+if (dmg_ref == "_c_dice"){
+  annual_gdpg_1900 <- function(sd){
+    g_years <- seq(sd$year[1], sd$year[length(sd$year)], by = 1)
+    annual_gdpcap <- sd$gdp
+    gdpg <- annual_gdpcap[2:(length(g_years))]/annual_gdpcap[1:(length(g_years) - 1)] - 1
+    return(list(year = g_years[2:(length(g_years))],gdpr = gdpg))
+  }
 }
 
 growthrate = gdpcap[, annual_gdpg(.SD), by = c("SSP","ISO3")]
