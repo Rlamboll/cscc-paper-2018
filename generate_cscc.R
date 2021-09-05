@@ -340,6 +340,7 @@ for (.rcp in rcps){
       # merge gdp for each year for the c_DICE damage function
       # also merge temperature at 1900 that will be the base temperature
       if (dmg_ref == "_c_dice"){
+        source("modules/cmip6.R")
         ssp_temp <- ssp_temp %>% left_join(basetemp_countries, by = c("model", "rcp", 
                                                                       "SSP", "ISO3"))
         sspgdp <- gdp_yearly[year %in% fyears]
