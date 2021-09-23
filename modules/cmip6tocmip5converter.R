@@ -1,6 +1,12 @@
 # cmip6 to cmip5 converter
 # Establishes which models in cmip5 are most similar to those in cmip6 for use in pulse factors
 cmip6tocmip5converter <- function(){
+  fileplace = "./data/cmip6tocmip5converter.Rdata"
+  if (file.exists(fileplace)){
+    load(file = fileplace)
+    return(modelmapping)
+  }
+  start_time <- Sys.time()
   source("./modules/cmip5.R")
   ctemp5 = ctemp
   rm(ctemp)
@@ -37,5 +43,8 @@ cmip6tocmip5converter <- function(){
     ind0 = ind0[1]
     modelmapping[modelmapping$cmip6==model_i, "cmip5"] = infilledmm$cmip5[ind0]
   }
+  end_time <- Sys.time()
+  print(end_time-start_time)
+  save(modelmapping, file=fileplace)
   return(modelmapping)
 }
