@@ -124,10 +124,6 @@ if(file.exists(saveloc)){
   
   setkey(ctemp,rcp,ISO3,year)
   
-  # Expected temperature
-  etemp = ctemp[,.(temp=mean(temp)),by=c("rcp","ISO3","year")]
-  
-  
   # BASELINE TEMPERATURE (annual average popweighted temperature observed 1980-2010)
   
   basetemp = ctemp[year>1979 & year<2011,.(temp=mean(temp)),by=c("ISO3")]

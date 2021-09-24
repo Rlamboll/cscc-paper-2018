@@ -20,7 +20,7 @@ options:
  -d         rich/poor damage function specification (default, pooled)
  -a         5-lag damage function specification (default, 0-lag)
  -f <name>  damage function (default=bhm (Burke et al.), djo (Dell et al.)), dice (Nordhaus)
- -m <cmip>  Use results from either cmip 5 (default) or cmip 6. 
+ -m <cmip>  Use results from either cmip5 (default) or cmip6 . 
  -t <opt>   allows for generating tests with different temperature input. t0 (zero temp change) or t1 (1 degree for one year in one country)
  -w         save raw data' -> doc
 
@@ -29,7 +29,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s all -c all -t t1 -e 1 -f dice -m cmip6") # Default case
+  opts <- docopt(doc, "-s all -c all -e 1 -f bhm -m cmip6")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -159,14 +159,31 @@ if (dmg_ref == "") {
 }
 if (cmip == "cmip5") {
   source("modules/cmip5.R")
+  source("modules/impulse_response.R")
 } else {
   source("modules/cmip6.R")
   basetemp = basetemp[ISO3==ISO3]
   ctemp = ctemp[ISO3==ISO3]
   accepted_combos = unique(ctemp$rcp)
-  ctemp$rcp = sapply(ctemp$rcp, function(x){substr(x, 2, 3)})
+  ctemp$ssp = substr( ctemp$rcp, 1, 1)
+  ctemp$rcp = paste0("rcp", substr(ctemp$rcp, 2, 3))
+  all_ctemps <- ctemp
+  source("modules/cmip6tocmip5converter.R")
+  cmipconverttable <- cmip6tocmip5converter()
+  source("modules/impulse_response.R")
+  cpulse_cmip6 = cpulse[FALSE, ]
+  for (mod in cmipconverttable$cmip6) {
+    convmod = cmipconverttable$cmip5[cmipconverttable$cmip6==mod]
+    stopifnot(nrow(convmod)==1)
+    tmpcpulse = cpulse[model==convmod]
+    tmpcpulse$model = mod
+    cpulse_cmip6 = rbind(cpulse_cmip6, tmpcpulse)
+  }
+  
+  cpulse = cpulse_cmip6
+  rm(cpulse_cmip6)
 }
-source("modules/impulse_response.R")
+
 
 for (.rcp in rcps){
   for (ssp in ssps){
@@ -184,6 +201,14 @@ for (.rcp in rcps){
       print(paste("richpoor: ",rich_poor))
       print(paste("LR (lag5): ", lag5))
       print(paste("damage function:",dmg_ref))
+      
+      if (cmip == "cmip6") {
+        ctemplocs = all_ctemps$rcp==.rcp & all_ctemps$ssp == substr(ssp, 4, 4)
+        ctemp = all_ctemps[ctemplocs, .SD, .SDcols = !c("ssp")]
+        valid_models = unique(ctemp[year==2100]$model)
+        ctemp = ctemp[model %in% valid_models]
+        etemp = ctemp[,.(temp=mean(temp)),by=c("rcp","ISO3","year")]
+      }
       
       if (dmg_func == "bootstrap" & clim == "ensemble") {
         ddd = file.path(resboot,paste0(ssp,"-",.rcp))
@@ -360,10 +385,10 @@ for (.rcp in rcps){
         ssp_temp = merge(ssp_temp,basetemp,by = c("ISO3")) # add basetemp
         ssp_gdpr <- merge(ssp_gr,ssp_temp,by = c("ISO3","year")) # merge growth rate and temp
         ssp_gdpr = merge(ssp_gdpr, sspgdpcap[SSP == ssp & year == fyears[1]],
-                         by = c("SSP","ISO3","year"),all.x = T) # add gdpcap0
+                         by = c("SSP","ISO3","year"),all.x = T) # add gdqpcap0
         if (clim == "ensemble") {
           ssp_gdpr = merge(cpulse[model %in% ssp_cmip5_models_temp & year %in% fyears],
-                           ssp_gdpr, by = c("ISO3","year","model"), all.x = T) 
+                           ssp_gdpr, by = c("ISO3","year","model"), all.x = T, allow.cartesian=TRUE) 
           ssp_gdpr[,model_id := paste(model,ccmodel)]
         }else{
           ssp_gdpr = merge(epulse[year %in% fyears],
@@ -637,10 +662,10 @@ for (.rcp in rcps){
       print(paste(poor_prefer_10_filename,"saved"))
       
       print(Sys.time() - t0)
+    } else {
+      disp(paste0("No data available for  ", ssp, " ", .rcp))
     }
   }
-} else {
-  disp(paste0("No data available for  ", ssp, " ", .rcp))
 }
 if (exists("generate_test")){
   rm(generate_test)
