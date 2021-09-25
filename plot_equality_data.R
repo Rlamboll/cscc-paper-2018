@@ -11,7 +11,7 @@ library(data.table)
 
 ' Input values to be plotted. Use values also used to generate files in the generate_cscc.r results folder
 
-usage: plot_equality_data.R [-e <eta> -v <ver> -t <type> -r <rcp> -s <ssp> -p <pro> -c <true> -f <dmg>]
+usage: plot_equality_data.R [-e <eta> -v <ver> -t <type> -r <rcp> -s <ssp> -p <pro> -c <true> -f <dmg> -m <cmip>]
 
 options:
  -e Eta value used in the model (1, 2 or 1:2 (default))
@@ -22,10 +22,11 @@ options:
  -p Projection type. (constant (default), horizon2100, all)
  -c Check in order to do a test
  -f Damage functions (default=bhm (Burke et al.), djo (Dell et al.), dice, nice 
-    (if additional data has been imported). Separate these options by commas)' -> my_doc
+    (if additional data has been imported). Separate these options by commas)
+ -m cmip version. (cmip5 (default), cmip6, both)' -> my_doc
 
 #my_opts <- docopt(my_doc, "-e 1 -v v4 -t poor_pref_10dollars -r 6.0,4.5,8.5 -f bhm") # Default case
-my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -v nicedice_v4 -r all -s all -f bhm,dice,djo,nice") 
+my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -v nicedice_v5 -r all -s all -f djo,bhm,dice,nice -m cmip6") 
 #my_opts <- docopt(my_doc, "-e 1 -t poor_pref_10dollars -r 8.5 -s 3 -f dice") 
 #my_opts <- docopt(my_doc, "-e 1,2 -t poor_pref_10dollars -r all -s all -f bhm,djo,dice") 
 #my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -r all -s all -f bhm,djo,dice") 
@@ -44,6 +45,15 @@ if (is.null(my_opts[["v"]])) {
   version_string = "" # no version number if there is no input for -v
 } else{ version_string = as.character(my_opts[["v"]])
 }
+if (is.null(my_opts[["m"]])) {
+  cmips=c("")
+} else if (my_opts[["m"]] == "cmip6") {
+  cmips=c("_cmip6")
+} else if (my_opts[["m"]] == "both") {
+  cmips=c("", "_cmip6")
+} else {
+  stop("Invalid cmip choice")
+}
 
 if (is.null(my_opts[["t"]])){
   type_str = "poor_pref_10dollars" #default
@@ -59,7 +69,7 @@ if (grepl(6.0, my_opts[["r"]])){
 if (grepl(8.5, my_opts[["r"]])){
   variable_rcp <- append(variable_rcp, 85)
 } 
-if (length(variable_rcp) == 0){variable_rcp = c(45,60,85)}
+if (length(variable_rcp) == 0){variable_rcp = c(19,34, 45, 60, 70, 85)}
 
 if (my_opts[["s"]] == "all" || is.null(my_opts[["s"]])) {
   ssp_plot = c(1:5) # SSP{1,2,3,4,5
@@ -88,64 +98,65 @@ if (is.null(my_opts[["f"]])) {
 # Conversion factor
 dollar_val_2020 = 1.35
   
-namefun <- function(x, y, z, timeframe){
+namefun <- function(x, y, z, timeframe, cmip){
   paste0(results_dir, "/res_statbhm_30C/", type_str, "SSP", x, "_rcp", y, 
-         "_", timeframe, "_estimates_climensemble_", "eta_", z, ".RData") 
+         "_", timeframe, "_estimates_climensemble_", "eta_", z, cmip, ".RData") 
 }
-namefun_altdamage <- function(x, y, z){
+namefun_altdamage <- function(x, y, z, cmip){
     paste0(results_dir, "/res_statdjo_richpoor/", type_str, "SSP", x, "_rcp", y,
-         "_constant_estimates_climensemble_djo_", "eta_", z, ".RData")
+         "_constant_estimates_climensemble_djo_", "eta_", z, cmip, ".RData")
 }
-namefun_nocut <- function(x, y, z, timeframe){
+namefun_nocut <- function(x, y, z, timeframe, cmip){
   paste0(results_dir, "/res_statbhm/", type_str, "SSP", x, "_rcp", y, 
-         "_", timeframe, "_estimates_climensemble_", "eta_", z, ".RData") 
+         "_", timeframe, "_estimates_climensemble_", "eta_", z, cmip, ".RData") 
 }
-namefun_dice <- function(x, y, z){
+namefun_dice <- function(x, y, z, cmip){
   paste0(results_dir, "/res_statdice/", type_str, "SSP", x, "_rcp", y, 
-        "_constant_estimates_climensemble_dice_", "eta_", z, ".RData") 
+        "_constant_estimates_climensemble_dice_", "eta_", z, cmip, ".RData") 
 }
 filelist=c()
 
-if (grepl("djo", dmg_f)){
-  for (y in variable_rcp){
-    for (z in variable_risk){
-      filelist2 = lapply(ssp_plot, namefun_altdamage, y=y, z=z)
-      filelist=c(filelist, filelist2)
+for (cmip in cmips){
+  if (grepl("djo", dmg_f)){
+    for (y in variable_rcp){
+      for (z in variable_risk){
+        filelist2 = lapply(ssp_plot, namefun_altdamage, y=y, z=z, cmip=cmip)
+        filelist=c(filelist, filelist2)
+      }
     }
-  }
-}  
-
-if (grepl("bhm", dmg_f)){
-  dir_30C <- str_sub(results_dir, 2, str_length(results_dir))
-  if (dir.exists(paste0(dir_30C, "/res_statbhm_30C"))){
+  }  
+  
+  if (grepl("bhm", dmg_f)){
+    dir_30C <- str_sub(results_dir, 2, str_length(results_dir))
+    if (dir.exists(paste0(dir_30C, "/res_statbhm_30C"))){
+      for (y in variable_rcp){
+        for (z in variable_risk){
+          for (timeframe in variable_timeframe){
+            filelist2 = lapply(ssp_plot, namefun, y=y, z=z, timeframe=timeframe, cmip=cmip) 
+            filelist=c(filelist, filelist2)
+          }
+        }
+      }
+    } 
     for (y in variable_rcp){
       for (z in variable_risk){
         for (timeframe in variable_timeframe){
-          filelist2 = lapply(ssp_plot, namefun, y=y, z=z, timeframe=timeframe) 
+          filelist2 = lapply(ssp_plot, namefun_nocut, y=y, z=z, timeframe=timeframe, cmip=cmip) 
           filelist=c(filelist, filelist2)
         }
       }
     }
-  } 
-  for (y in variable_rcp){
-    for (z in variable_risk){
-      for (timeframe in variable_timeframe){
-        filelist2 = lapply(ssp_plot, namefun_nocut, y=y, z=z, timeframe=timeframe) 
+  }
+  
+  if (grepl("dice", dmg_f)){
+    for (y in variable_rcp){
+      for (z in variable_risk){
+        filelist2 = lapply(ssp_plot, namefun_dice, y=y, z=z, cmip=cmip)
         filelist=c(filelist, filelist2)
       }
     }
-  }
+  }  
 }
-
-if (grepl("dice", dmg_f)){
-  for (y in variable_rcp){
-    for (z in variable_risk){
-      filelist2 = lapply(ssp_plot, namefun_dice, y=y, z=z)
-      filelist=c(filelist, filelist2)
-    }
-  }
-}  
-
 
 results_table <- data.table(ssp=integer(), rcp=numeric(), eta=numeric(), PRTP=numeric(), 
                             damages=character(), indicator=character(), value=numeric())
@@ -153,7 +164,9 @@ columns_to_save = c("mean")
 origin = getwd()
 compare_results = results_table
 for (file in filelist) {
-  load(paste0(origin, file))
+  possible_fail <- tryCatch(load(paste0(origin, file)), silent=TRUE, error=function(e){return("File not found")})
+  if (possible_fail=="File not found") next
+  
   sspnum = as.numeric(substr(strsplit(file, split = "SSP")[[1]][2], 1, 1))
   rcpnum = substr(strsplit(file, split = "rcp")[[1]][2], 1, 2)
   rcpnum = sub("(.{1})(.*)", "\\1.\\2", rcpnum)
@@ -280,7 +293,7 @@ if (type_str == "eri_eq_statscc_2020d" & !(grepl("nice", dmg_f))){
     scale_y_continuous(trans = "log2") + scale_x_continuous(trans = "log2") + ylab(
       "SCC inequality-indifferent value") + xlab("SCC inequality-averse value for Eritrea")
   plotdif
-  savediffig = paste0(type_str, "InequalityAlteration", version_string, ".png")
+  savediffig = paste0(type_str, "InequalityAlteration", version_string, cmip ".png")
   ggsave(path="plots", filename=savediffig)
 }
 
