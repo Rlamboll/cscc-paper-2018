@@ -25,8 +25,8 @@ if(file.exists(saveloc)){
   # from a higher fileblocki by uncommenting one of the lines below. 
   
   all_ctemp = list()
-  load(temp_file)
-  fileblockstart = 4
+  #load(temp_file)
+  fileblockstart = 1
   
   scenario_counter = data.frame(matrix(ncol = 2, nrow = 0))
   colnames(scenario_counter) = c("scenario", "count")

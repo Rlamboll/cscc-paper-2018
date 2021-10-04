@@ -29,7 +29,8 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s all -c all -e 1 -f djo -m cmip6")
+  #opts <- docopt(doc, "-s all -c all -e 1 -f djo -m cmip6")
+  opts <- docopt(doc, "-s all -c all -f djo -t t1")  # for running tests
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -100,7 +101,6 @@ if (opts[["c"]] == "all") {
   } else {
     rcps = c("rcp19", "rcp26", "rcp34", "rcp45", "rcp60", "rcp70", "rcp85")
   }
-  
 } else {
   rcps = as.character(opts["c"]) 
 }
@@ -220,9 +220,9 @@ for (.rcp in rcps){
       print(Sys.time() - t0)
       
       # All combination of models available (CC x GCM for each RCP)
-      ssp_cmip5_models_temp <- ctemp[rcp == .rcp,unique(model)]
+      ssp_cmip_models_temp <- ctemp[rcp == .rcp,unique(model)]
       model_comb <- cpulse[ISO3 == "USA" & mid_year == 0.5 & 
-                             model %in% ssp_cmip5_models_temp, 
+                             model %in% ssp_cmip_models_temp, 
                            .(model,ccmodel)]
       
       # Future years
@@ -386,7 +386,7 @@ for (.rcp in rcps){
         ssp_gdpr = merge(ssp_gdpr, sspgdpcap[SSP == ssp & year == fyears[1]],
                          by = c("SSP","ISO3","year"),all.x = T) # add gdqpcap0
         if (clim == "ensemble") {
-          ssp_gdpr = merge(cpulse[model %in% ssp_cmip5_models_temp & year %in% fyears],
+          ssp_gdpr = merge(cpulse[model %in% ssp_cmip_models_temp & year %in% fyears],
                            ssp_gdpr, by = c("ISO3","year","model"), all.x = T)
           ssp_gdpr[,model_id := paste(model,ccmodel)]
         }else{
