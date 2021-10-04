@@ -69,7 +69,7 @@ if (grepl(6.0, my_opts[["r"]])){
 if (grepl(8.5, my_opts[["r"]])){
   variable_rcp <- append(variable_rcp, 85)
 } 
-if (length(variable_rcp) == 0){variable_rcp = c(19,34, 45, 60, 70, 85)}
+if (length(variable_rcp) == 0){variable_rcp = c(19,26, 34, 45, 60, 70, 85)}
 
 if (my_opts[["s"]] == "all" || is.null(my_opts[["s"]])) {
   ssp_plot = c(1:5) # SSP{1,2,3,4,5
@@ -293,7 +293,7 @@ if (type_str == "eri_eq_statscc_2020d" & !(grepl("nice", dmg_f))){
     scale_y_continuous(trans = "log2") + scale_x_continuous(trans = "log2") + ylab(
       "SCC inequality-indifferent value") + xlab("SCC inequality-averse value for Eritrea")
   plotdif
-  savediffig = paste0(type_str, "InequalityAlteration", version_string, cmip ".png")
+  savediffig = paste0(type_str, "InequalityAlteration", version_string, cmip, ".png")
   ggsave(path="plots", filename=savediffig)
 }
 

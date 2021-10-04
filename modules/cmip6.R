@@ -4,7 +4,7 @@
 # Also, if this file fails during the first run, it is possible to recover 
 # workings results instead of re-initialising all_ctemp
 
-saveloc = "./data/cmip6/all_ctemp_calced_single.Rdata"
+saveloc = "./data/cmip6/all_ctemp_calced_single1900_first.Rdata"
 if(file.exists(saveloc)){
   load(saveloc)
 } else{
@@ -16,17 +16,17 @@ if(file.exists(saveloc)){
   library(stringr)
   
   # Alter the start date to get earlier info
-  startdate = 1980
+  startdate = 1900
   
   # Load popweighted country temperature increase
   files = Sys.glob(file.path("data","cmip6","20210416_*.feather"))
-  temp_file = "./data/cmip6/temp_processing_workings_cmip6.Rdata"
+  temp_file = "./data/cmip6/temp_processing_workings_cmip6_1900_first.Rdata"
   # Either initialise the list of data or load the previous results and start 
   # from a higher fileblocki by uncommenting one of the lines below. 
   
-  #all_ctemp = list()
+  all_ctemp = list()
   load(temp_file)
-  fileblockstart = 5
+  fileblockstart = 4
   
   scenario_counter = data.frame(matrix(ncol = 2, nrow = 0))
   colnames(scenario_counter) = c("scenario", "count")
@@ -55,7 +55,7 @@ if(file.exists(saveloc)){
                    measure.vars=paste(startdate:2100),
                    variable.name="year",value.name="temperature",
                    variable.factor = F)
-      ctemp = aggregate(temperature~region+scenario+climate_model+year, ctemp, mean)
+      ctemp = aggregate(temperature~region+scenario+climate_model+year, ctemp, head, 1)
       print("File loaded")
       ctemp = dplyr::filter(ctemp, grepl(countrypref, region))
       ctemp$region = str_replace(ctemp$region, countrypref, "")
@@ -108,25 +108,32 @@ if(file.exists(saveloc)){
     save.image(temp_file)
     print(paste0("~~~~~~~~~~~~~ Completed file block #", fileblocki, " ~~~~~~~~~~~~~~~"))
   }
-  all_ctemp = rbindlist(all_ctemp)
-  rm(temp,ctemp,temp2)
-  # Clean the data and use Celsius
-  all_ctemp = all_ctemp[!is.na(Country)]
-  all_ctemp$temperature = all_ctemp$temperature - 273.15
-  all_ctemp$Country = countrycode(all_ctemp$Country, "country.name", "country.name")
-  all_countries <- unique(all_ctemp$Country)
-  all_iso3 <- countrycode(all_countries, "country.name", "iso3c")
-  
-  ctemp <- merge(all_ctemp,data.table(Country=all_countries, ISO3=all_iso3),by=c("Country"))
-  rm(all_ctemp)
-  
-  ctemp = ctemp[,list(model,rcp,ISO3,year,temp=temperature)]
-  
-  setkey(ctemp,rcp,ISO3,year)
-  
-  # BASELINE TEMPERATURE (annual average popweighted temperature observed 1980-2010)
-  
-  basetemp = ctemp[year>1979 & year<2011,.(temp=mean(temp)),by=c("ISO3")]
-  basetemp = basetemp[,list(ISO3,basetemp=temp)]
-  save.image(saveloc)
+    all_ctemp = rbindlist(all_ctemp)
+    rm(temp,ctemp,temp2)
+    # Clean the data and use Celsius
+    all_ctemp = all_ctemp[!is.na(Country)]
+    all_ctemp$temperature = all_ctemp$temperature - 273.15
+    all_ctemp$Country = countrycode(all_ctemp$Country, "country.name", "country.name")
+    all_countries <- unique(all_ctemp$Country)
+    all_iso3 <- countrycode(all_countries, "country.name", "iso3c")
+    
+    ctemp <- merge(all_ctemp,data.table(Country=all_countries, ISO3=all_iso3),by=c("Country"))
+    rm(all_ctemp)
+    
+    # BASELINE TEMPERATURE (annual average popweighted temperature observed 1980-2010)
+    
+    basetemp = ctemp[year>1979 & year<2011,.(temp=mean(temperature)),by=c("ISO3")]
+    basetemp = basetemp[,list(ISO3,basetemp=temp)]
+    
+    # Correct the offset between models for each country
+    model_offset = ctemp[year>1979 & year<2011,.(mod_temp=mean(temperature)),by=c("ISO3", "model")]
+    model_offset = merge(model_offset, basetemp, by=c("ISO3"))
+    model_offset[, temp_dif:=basetemp-mod_temp]
+    ctemp = merge(ctemp, model_offset, by=c("ISO3", "model"))
+    ctemp[, temp:=temperature+temp_dif]
+    
+    ctemp = ctemp[,list(model,rcp,ISO3,year,temp)]
+    
+    setkey(ctemp,rcp,ISO3,year)
+    save.image(saveloc)
 }

@@ -29,7 +29,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s all -c all -e 1 -f bhm -m cmip6")
+  opts <- docopt(doc, "-s all -c all -e 1 -f djo -m cmip6")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -179,7 +179,6 @@ if (cmip == "cmip5") {
     tmpcpulse$model = mod
     cpulse_cmip6 = rbind(cpulse_cmip6, tmpcpulse)
   }
-  
   cpulse = cpulse_cmip6
   rm(cpulse_cmip6)
 }
@@ -388,7 +387,7 @@ for (.rcp in rcps){
                          by = c("SSP","ISO3","year"),all.x = T) # add gdqpcap0
         if (clim == "ensemble") {
           ssp_gdpr = merge(cpulse[model %in% ssp_cmip5_models_temp & year %in% fyears],
-                           ssp_gdpr, by = c("ISO3","year","model"), all.x = T, allow.cartesian=TRUE) 
+                           ssp_gdpr, by = c("ISO3","year","model"), all.x = T)
           ssp_gdpr[,model_id := paste(model,ccmodel)]
         }else{
           ssp_gdpr = merge(epulse[year %in% fyears],
