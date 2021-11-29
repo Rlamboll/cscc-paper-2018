@@ -1,9 +1,10 @@
 # Compute country-level social cost of carbon
 #
-# Any questions: laurent.drouet@eiee.org
+# Workhorse function to calculate the social cost of carbon for a scenario.
+# 
 # Launch Rscript ./generate_cscc.R to see usage
 # Check the Rmd file for an example of use
-# Outputs are expressed in USD 2005
+# Outputs are expressed in USD 2005 except where specified in the variable name
 
 library(data.table)
 library(docopt)
@@ -20,8 +21,11 @@ options:
  -d         rich/poor damage function specification (default, pooled)
  -a         5-lag damage function specification (default, 0-lag)
  -f <name>  damage function (default=bhm (Burke et al.), djo (Dell et al.)), dice (Nordhaus)
- -m <cmip>  Use results from either cmip5 (default) or cmip6 . 
- -t <opt>   allows for generating tests with different temperature input. t0 (zero temp change) or t1 (1 degree for one year in one country)
+ -m <cmip>  Use results from either cmip5 (default) or cmip6. Can also use cmip6_all to 
+            decouple ssp and rcp in cmip6 experiments (returns results for all ssp/rcp combos, 
+            irrespective of whether or not this is possible to achieve)
+ -t <opt>   allows for generating tests with different temperature input. t0 (zero temp 
+            change) or t1 (1 degree for one year in one country)
  -w         save raw data' -> doc
 
 
@@ -29,8 +33,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  #opts <- docopt(doc, "-s all -c all -e 1 -f djo -m cmip6")
-  opts <- docopt(doc, "-s all -c all -f djo -t t1")  # for running tests
+  opts <- docopt(doc, "-s all -c all -e 1 -f bhm -m cmip6")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -77,9 +80,9 @@ if (is.null(opts[["l"]])) {
 
 if (is.null(opts[["e"]])){ # default RRA is 1 
   etas = c(1)
-} else if (opts["e"] == 1){
-  etas = c(1)
-} else {etas = c(2)}
+} else {
+  etas = c(as.double(opts[["e"]]))
+}
 
 if (is.null(opts[["f"]])) {
   dmg_ref = "bhm"
@@ -88,12 +91,17 @@ if (is.null(opts[["f"]])) {
 }
 
 
-if (is.null(opts[["-m"]])){
+if (is.null(opts[["-m"]]) | (opts[["-m"]] == "cmip5")){
   cmip = "cmip5"
+  decouple_cmip6 = TRUE
 } else if (opts[["-m"]] == "cmip6") {
   cmip = "cmip6"
+  decouple_cmip6 = FALSE
+} else if (opts[["-m"]] == "cmip6_all"){
+  cmip = "cmip6"
+  decouple_cmip6 = TRUE
 } else {
-  cmip = "cmip5"
+  stop("Cannot interpret cmip option")
 }
 if (opts[["c"]] == "all") {
   if (cmip=="cmip5") {
@@ -133,9 +141,13 @@ if (dmg_ref == "djo") {
 }
 
 resdir = paste0(preffdir,"_stat",dmg_ref)
+
 if (!out_of_sample) {resdir = paste0(resdir,"_30C")}
 if (rich_poor) {resdir = paste0(resdir,"_richpoor")}
 if (lag5) {resdir = paste0(resdir,"_lr")}
+if (decouple_cmip6 & (cmip == "cmip6")) {
+  resdir = paste0(resdir, "/allcombs_cmip6")
+}
 
 resboot = paste0(preffdir,"_boot")
 if (!out_of_sample) {resboot = paste0(resboot,"_30C")}
@@ -160,6 +172,7 @@ if (dmg_ref == "") {
 if (cmip == "cmip5") {
   source("modules/cmip5.R")
   source("modules/impulse_response.R")
+  accepted_combos = unique(ctemp$rcp)
 } else {
   source("modules/cmip6.R")
   basetemp = basetemp[ISO3==ISO3]
@@ -182,11 +195,11 @@ if (cmip == "cmip5") {
   cpulse = cpulse_cmip6
   rm(cpulse_cmip6)
 }
-
+ 
 
 for (.rcp in rcps){
   for (ssp in ssps){
-    if (paste0(substr(ssp, 4,4), substr(.rcp, 4, nchar(.rcp))) %in% accepted_combos) {
+    if ((paste0(substr(ssp, 4,4), substr(.rcp, 4, nchar(.rcp))) %in% accepted_combos) | decouple_cmip6) {
       # Print simulation parameters
       print(paste("SSP: ",ssp))
       print(paste("RCP: ",.rcp))
@@ -202,9 +215,20 @@ for (.rcp in rcps){
       print(paste("damage function:",dmg_ref))
       
       if (cmip == "cmip6") {
-        ctemplocs = all_ctemps$rcp==.rcp & all_ctemps$ssp == substr(ssp, 4, 4)
+        if (decouple_cmip6){
+          ctemplocs = all_ctemps$rcp == .rcp
+          if (length(unique(all_ctemps[ctemplocs]$ssp)) > 1){
+            # In the rare case there are multiple options, default towards 
+            # smaller SSPS
+            climate_ssp = min(all_ctemps[ctemplocs]$ssp)
+            ctemplocs = all_ctemps$rcp == .rcp & all_ctemps$ssp == climate_ssp
+          }
+        } else {
+          ctemplocs = all_ctemps$rcp == .rcp & all_ctemps$ssp == substr(ssp, 4, 4)
+        }
         ctemp = all_ctemps[ctemplocs, .SD, .SDcols = !c("ssp")]
         valid_models = unique(ctemp[year==2100]$model)
+        valid_models = valid_models[valid_models!="CIESM"]
         ctemp = ctemp[model %in% valid_models]
         etemp = ctemp[,.(temp=mean(temp)),by=c("rcp","ISO3","year")]
       }
