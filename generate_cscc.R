@@ -7,6 +7,7 @@
 # Outputs are expressed in USD 2005 except where specified in the variable name
 
 library(data.table)
+library(dplyr)
 library(docopt)
 
 'usage: generate_cscc.R -s <ssp> -c <rcp> [ -r <runid> -p <type> -l <clim> -e <eta> -f <name> -m <cmip> -t <opt>] [-a] [-o] [-d] [-w]
@@ -33,7 +34,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s all -c all -e 1 -f bhm -m cmip6")
+  opts <- docopt(doc, "-s all -c all -e 1 -f djo -m cmip6")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -527,6 +528,10 @@ for (.rcp in rcps){
         }
         print(Sys.time() - t0)
   
+        # Note the number of scenarios with negative growth
+        neg_growth <- res_scc[year==2100] %>% group_by(ISO3) %>% mutate(
+          neg_prop = sum(gdprate_cc<0)/sum(gdprate_cc==gdprate_cc))
+        neg_growth <- unique(neg_growth[c("ISO3", "neg_prop")])
         
         # Discount SCC according to Anthoff and Tol equation A3 in Appendix
         # elasticity of marginal utility of consumption = 1
@@ -660,6 +665,11 @@ for (.rcp in rcps){
         save(store_scc_flat, file = filename)
         print(paste(filename,"saved"))
       }
+      # Also save the negative growth statistics
+      filename = file.path(resdir,paste0("neg_growth_",savestring))
+      save(neg_growth, file = filename)
+      print(paste(filename,"saved"))
+      
       eq_stat_wscc <-  rbindlist(lapply(store_eq_wscc_flat, compute_stat))
       eq_stat_wscc$ID <- names(store_eq_wscc_flat)
       eri_eq_stat_wscc <-  rbindlist(lapply(store_eri_eq_wscc_flat, compute_stat))
@@ -679,6 +689,7 @@ for (.rcp in rcps){
       poor_prefer_10 <- as.data.frame(
         sapply(subset(eq_stat_wscc, select=names(eq_stat_wscc)[names(eq_stat_wscc) != "ID"]),FUN=poorpref_fn)
       )
+
       poor_prefer_10$ID <- eq_stat_wscc$ID
       poor_prefer_10_filename = file.path(resdir,paste0("poor_pref_10dollars",savestring))
       save(poor_prefer_10, file = poor_prefer_10_filename)

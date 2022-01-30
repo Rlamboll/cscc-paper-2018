@@ -3,6 +3,7 @@ library(stringr)
 library(docopt)
 library(data.table)
 library(tidyr)
+library(dplyr)
 
 
 # This file plots results from the generate_cscc.R file
@@ -28,7 +29,8 @@ options:
  -m cmip version. (cmip5 (default), cmip6, cmip6_all, both)' -> my_doc
 
 #my_opts <- docopt(my_doc, "-e 1 -v v4 -t poor_pref_10dollars -r 6.0,4.5,8.5 -f bhm") # Default case
-my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -v v6_cmipcompare -r all -s all -f djo,bhm,dice -m both") 
+#my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -v v7 -r all -s all -f djo,bhm,nice -m cmip6_all") 
+my_opts <- docopt(my_doc, "-e 1 -t neg_growth_ -v v8 -r all -s all -f bhm -m cmip6") 
 #my_opts <- docopt(my_doc, "-e 1 -t poor_pref_10dollars -r 8.5 -s 3 -f dice,bhm,dice,nice") 
 #my_opts <- docopt(my_doc, "-e 1,2 -t poor_pref_10dollars -r all -s all -f bhm,djo,dice") 
 #my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -r all -s all -f bhm,djo,dice")
@@ -178,7 +180,7 @@ for (cmip in cmips){
 
 results_table <- data.table(cmip=character(), ssp=integer(), rcp=numeric(), eta=numeric(), PRTP=numeric(), 
                             damages=character(), indicator=character(), value=numeric())
-columns_to_save = c("mean")
+
 origin = getwd()
 compare_results = results_table
 for (file in filelist) {
@@ -194,32 +196,47 @@ for (file in filelist) {
     damages = str_c(damages, " 30C")
   }
   cmip = if(grepl("cmip6", file)) "cmip6" else "cmip5"
-  for (column in columns_to_save){
-    if(type_str == "eri_eq_statscc_2020d"){
-      use_table = eri_eq_stat_wscc
-      # We can also compare the impact of inequality aversion
-      compare_file = str_replace(file, "eri_eq_statscc_2020d", "statscc_")
-      load(paste0(origin, compare_file))
-      compare_table = stat_scc
-    } else {
-      use_table = poor_prefer_10
-    }
-    rows_to_save = lapply(use_table$ID, strsplit, split="_")
-    rowind = 0
-    for (row in rows_to_save){
-      rowind = rowind + 1
-      if (row[[1]][1] %in% c("NA", "3") ) next
-      PRTPnum = row[[1]][1]
-      etanum = row[[1]][2]
-      results_table <- rbind(results_table, list(
-        cmip, sspnum, rcpnum, etanum, PRTPnum, damages, column, use_table[[rowind, column]])
-      )
+  if (type_str == "neg_growth_") {
+    use_table =  rename(neg_growth, indicator=ISO3, value=neg_prop)
+    use_table["cmip"] = cmip
+    use_table["ssp"] = sspnum
+    use_table["rcp"] = rcpnum
+    use_table["eta"] = NA
+    use_table["PRTP"] = NA
+    use_table["damages"] = damages
+    use_table <- use_table[, colnames(results_table) ]
+    results_table <- rbind(results_table, use_table)
+  } else {
+    columns_to_save = c("mean")
+    for (column in columns_to_save){
       if(type_str == "eri_eq_statscc_2020d"){
-        compare_results <- rbind(
-          compare_results, list(cmip, sspnum, rcpnum, etanum, PRTPnum, damages, column, compare_table[[
-            which(compare_table$ID == paste(PRTPnum, etanum, "NA", "WLD", sep="_")), column
-          ]])
+        use_table = eri_eq_stat_wscc
+        # We can also compare the impact of inequality aversion
+        compare_file = str_replace(file, "eri_eq_statscc_2020d", "statscc_")
+        load(paste0(origin, compare_file))
+        compare_table = stat_scc
+      } else if (type_str == "poor_pref_10dollars") {
+        use_table = poor_prefer_10
+      } else {
+        stop("Error: invalid combination of options")
+      }
+      rows_to_save = lapply(use_table$ID, strsplit, split="_")
+      rowind = 0
+      for (row in rows_to_save){
+        rowind = rowind + 1
+        if (row[[1]][1] %in% c("NA", "3") ) next
+        PRTPnum = row[[1]][1]
+        etanum = row[[1]][2]
+        results_table <- rbind(results_table, list(
+          cmip, sspnum, rcpnum, etanum, PRTPnum, damages, column, use_table[[rowind, column]])
         )
+        if(type_str == "eri_eq_statscc_2020d"){
+          compare_results <- rbind(
+            compare_results, list(cmip, sspnum, rcpnum, etanum, PRTPnum, damages, column, compare_table[[
+              which(compare_table$ID == paste(PRTPnum, etanum, "NA", "WLD", sep="_")), column
+            ]])
+          )
+        }
       }
     }
   }
@@ -266,88 +283,104 @@ if (grepl("nice", dmg_f)){
   }
 }
 
-
-if(type_str == "eri_eq_statscc_2020d"){
-  plot_labs = labs(
-    title="World SCC relative to the income of an Eritrean",
-    fill="Inequality aversion"
-  ) 
-  plot_ylab = ylab("SCC (2020 USD)") 
-} else if(type_str == "poor_pref_10dollars"){
-  plot_labs = labs(
-    title="Income at which direct donation is preferable to $10/ton CO2",
-    fill="Inequality aversion"
-  )
-  plot_ylab = ylab("Yearly income (2020 USD)") 
-}
-
-set.seed(10)
-explain_eta = function(et){paste0("RRA: ", et)}
-explain_prtp = function(pr){paste0("PRTP: ", pr)}
-label_axes = labeller(
-  eta=explain_eta, PRTP=explain_prtp
-)
-results_table$SSP <- factor(results_table$ssp)
-plot = ggplot(results_table, aes(x=rcp, y=value, color=SSP))+geom_point(
-  alpha=0.9, size=2
-) + plot_labs + plot_ylab + xlab("RCP pathway") + facet_grid(PRTP+eta~damages , labeller = label_axes
-)
-if (type_str != "eri_eq_statscc_2020d"){
-  plot = plot + geom_hline(yintercept=1.9*365)
-  plot = plot + geom_hline(yintercept=500, color="red")
-} else {
-  plot = plot + geom_hline(yintercept=10)
-}
-plot = plot + scale_y_continuous(trans = "log2")
-
-plot
-
-subDir = "plots"
-if (!dir.exists(file.path(subDir))){
-  dir.create(file.path(subDir))
-}
-
-savefig = paste0(type_str, version_string, ".png")
-ggsave(path="plots", filename=savefig)
-print(paste0("Saved ", savefig))
-
-if (type_str == "eri_eq_statscc_2020d" & !(grepl("nice", dmg_f))){
-  combined_data = results_table
-  combined_data$ratio = compare_results$value / results_table$value
-  combined_data$no_ineq = compare_results$value
-  plotdif = ggplot(combined_data, aes(x=value, y=no_ineq, color=SSP, shape=rcp)) + geom_point(
-    alpha=0.9, size=3
-  ) + facet_grid(PRTP+eta~damages, labeller = label_axes) + 
-    scale_y_continuous(trans = "log2") + scale_x_continuous(trans = "log2") + ylab(
-      "SCC inequality-indifferent value") + xlab("SCC inequality-averse value for Eritrea")
-  plotdif
-  savediffig = paste0(type_str, "InequalityAlteration", version_string, cmip, ".png")
-  ggsave(path="plots", filename=savediffig)
-  print(paste0("Saved ", savediffig))
-}
-
-if (type_str == "eri_eq_statscc_2020d" & all(size(cmips) == c(1,2))) {
-  double_data = aggregate(results_table, by=list(results_table$ssp, results_table$rcp, 
-    results_table$eta, results_table$PRTP, results_table$damages, results_table$indicator, 
-    results_table$SSP), FUN=length)
-  double_data = double_data[double_data$cmip==2,]
-  doublecmipdata = results_table[FALSE,]
-  for (row_i in c(1:nrow(double_data))){
-    doublecmipdata = rbind(doublecmipdata, results_table[
-      results_table$ssp == double_data$Group.1[row_i] & 
-      results_table$rcp == double_data$Group.2[row_i] &
-      results_table$eta == double_data$Group.3[row_i] & 
-      results_table$PRTP == double_data$Group.4[row_i] &
-      results_table$damages == double_data$Group.5[row_i] & 
-      results_table$indicator == double_data$Group.6[row_i] &
-      results_table$SSP == double_data$Group.7[row_i],])
-  }
-  doublecmipdataw = pivot_wider(doublecmipdata, names_from=cmip, values_from=value)
-  plotdif = ggplot(doublecmipdataw, aes(x=cmip5, y=cmip6)) + geom_point() + 
-    geom_abline(slope=1) + xlab("CMIP5 inequality-averse SCC for Eritrea ($)") + scale_x_continuous(trans = "log2") +
-    ylab("CMIP6  inequality-averse SCC for Eritrea ($)") + scale_y_continuous(trans = "log2")
-  plotdif
+if (typr_str == "neg_growth_"){
+  results_sum = aggregate(results_table[, "value"], list(results_table$indicator), mean)
+  library("rnaturalearth")
+  library("rnaturalearthdata")
+  target_crs <- "+proj=eqearth +wktext"
+  world <- ne_countries(scale = "medium", returnclass = "sf")
+  world <- merge(world, results_sum, by.x="adm0_a3", by.y="Group.1", all=TRUE)
+  target_crs <- '+proj=eqearth +wktext'
+  ggplot(data = world) + geom_sf(aes(fill=value))+ coord_sf(crs = target_crs)
+  
   savediffig = paste0(type_str, "cmip5vs6eritrea", version_string, cmip, ".png")
-  ggsave(path="plots", filename=savediffig)
+  ggsave(path="plots", filename=savediffig) 
+  
+  
+} else {
+  
+  if(type_str == "eri_eq_statscc_2020d"){
+    plot_labs = labs(
+      title="World SCC relative to the average Eritrean ($)",
+      fill="Inequality aversion"
+    ) 
+    plot_ylab = ylab("World SCC relative to the average Eritrean ($)") 
+  } else if(type_str == "poor_pref_10dollars"){
+    plot_labs = labs(
+      title="Income at which $10 cash is preferable to a ton CO2",
+      fill="Inequality aversion"
+    )
+    plot_ylab = ylab("Yearly income ($)") 
+  }
+  
+  set.seed(10)
+  explain_eta = function(et){paste0("RRA: ", et)}
+  explain_prtp = function(pr){paste0("PRTP: ", pr)}
+  label_axes = labeller(
+    eta=explain_eta, PRTP=explain_prtp
+  )
+  results_table$SSP <- factor(results_table$ssp)
+  plot = ggplot(results_table, aes(x=rcp, y=value, color=SSP))+geom_point(
+    alpha=0.9, size=2
+  ) + plot_labs + plot_ylab + xlab("RCP pathway") + facet_grid(PRTP+eta~damages , labeller = label_axes
+  )
+  if (type_str != "eri_eq_statscc_2020d"){
+    plot = plot + geom_hline(yintercept=1.9*365)
+    plot = plot + geom_hline(yintercept=500, color="red")
+  } else if (type_str == "poor_pref_10dollars") {
+    plot = plot + geom_hline(yintercept=10)
+  }
+  plot = plot + scale_y_continuous(trans = "log2")
+  
+  plot
+  
+  subDir = "plots"
+  if (!dir.exists(file.path(subDir))){
+    dir.create(file.path(subDir))
+  }
+  
+  savefig = paste0(type_str, version_string, ".png")
+  ggsave(path="plots", filename=savefig)
+  print(paste0("Saved ", savefig))
+  
+  if (type_str == "eri_eq_statscc_2020d" & !(grepl("nice", dmg_f))){
+    combined_data = results_table
+    combined_data$ratio = compare_results$value / results_table$value
+    combined_data$no_ineq = compare_results$value
+    plotdif = ggplot(combined_data, aes(x=value, y=no_ineq, color=SSP, shape=rcp)) + geom_point(
+      alpha=0.9, size=3
+    ) + facet_grid(PRTP+eta~damages, labeller = label_axes) + 
+      scale_y_continuous(trans = "log2") + scale_x_continuous(trans = "log2") + ylab(
+        "Summed country cost of carbon ($)") + xlab("World SCC to average Eritrean ($)")
+    plotdif
+    savediffig = paste0(type_str, "InequalityAlteration", version_string, cmip, ".png")
+    ggsave(path="plots", filename=savediffig)
+    print(paste0("Saved ", savediffig))
+  }
+  
+  if (type_str == "eri_eq_statscc_2020d" & (length(cmips) == 2)) {
+    double_data = aggregate(results_table, by=list(results_table$ssp, results_table$rcp, 
+      results_table$eta, results_table$PRTP, results_table$damages, results_table$indicator, 
+      results_table$SSP), FUN=length)
+    double_data = double_data[double_data$cmip==2,]
+    doublecmipdata = results_table[FALSE,]
+    for (row_i in c(1:nrow(double_data))){
+      doublecmipdata = rbind(doublecmipdata, results_table[
+        results_table$ssp == double_data$Group.1[row_i] & 
+        results_table$rcp == double_data$Group.2[row_i] &
+        results_table$eta == double_data$Group.3[row_i] & 
+        results_table$PRTP == double_data$Group.4[row_i] &
+        results_table$damages == double_data$Group.5[row_i] & 
+        results_table$indicator == double_data$Group.6[row_i] &
+        results_table$SSP == double_data$Group.7[row_i],])
+    }
+    doublecmipdataw = pivot_wider(doublecmipdata, names_from=cmip, values_from=value)
+    plotdif = ggplot(doublecmipdataw, aes(x=cmip5, y=cmip6)) + geom_point() + 
+      geom_abline(slope=1) + xlab("CMIP5 World SCC relative to the average Eritrean (2020 USD") + scale_x_continuous(trans = "log2") +
+      ylab("CMIP6 World SCC relative to the average Eritrean (2020 USD") + scale_y_continuous(trans = "log2") + 
+      theme(text = element_text(size=15))
+    plotdif
+    savediffig = paste0(type_str, "Plots", version_string, cmip, ".png")
+    ggsave(path="plots", filename=savediffig)
+  }
 }
-
