@@ -283,17 +283,22 @@ if (grepl("nice", dmg_f)){
   }
 }
 
-if (typr_str == "neg_growth_"){
+if (type_str == "neg_growth_"){
   results_sum = aggregate(results_table[, "value"], list(results_table$indicator), mean)
+  scen_len = length(results_table[rcp==1.9])
+  for (rcp in unique(results_table[,"rcp"])){
+    stopifnot(length(results_table[rcp==rcp]) == scen_len)
+  }
   library("rnaturalearth")
   library("rnaturalearthdata")
-  target_crs <- "+proj=eqearth +wktext"
   world <- ne_countries(scale = "medium", returnclass = "sf")
   world <- merge(world, results_sum, by.x="adm0_a3", by.y="Group.1", all=TRUE)
   target_crs <- '+proj=eqearth +wktext'
-  ggplot(data = world) + geom_sf(aes(fill=value))+ coord_sf(crs = target_crs)
+  ggplot(data = world) + geom_sf(aes(fill=value)) + coord_sf(crs = target_crs) +
+    scale_fill_viridis_c(option = "inferno",  name = "Negative growth fraction") + 
+    theme(legend.title = element_text(size = 12, angle = 90), legend.title.align = 0.5)
   
-  savediffig = paste0(type_str, "cmip5vs6eritrea", version_string, cmip, ".png")
+  savediffig = paste0(type_str, damages, version_string, cmip, ".png")
   ggsave(path="plots", filename=savediffig) 
   
   
