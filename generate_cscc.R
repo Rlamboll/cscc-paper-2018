@@ -34,7 +34,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s all -c all -e 1 -f djo -m cmip6")
+  opts <- docopt(doc, "-s SSP4 -c RCP60 -e 1 -f djo -m cmip6")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -256,60 +256,6 @@ for (.rcp in rcps){
       # Impulse year
       cpulse[,year := mid_year - 0.5 + fyears[1]]
       epulse[,year := mid_year - 0.5 + fyears[1]]
-      
-      project_gdpcap_nocc <- function(SD){
-        .gdpcap <- SD$gdpcap
-        .gdpr <- SD$gdpr
-        .gdpcap_tm1 <- SD$gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap in 2019
-        for (i in seq_along(c(fyears))) {
-          .gdpcap[i] <- .gdpcap_tm1 * (1 + SD$gdpr[i])
-          .gdpcap_tm1 <- .gdpcap[i]
-        }
-        return(list(year = fyears, 
-                    gdpcap = .gdpcap,
-                    gdprate = SD$gdpr,
-                    delta = NA))
-      }
-      
-      project_gdpcap_cc <- function(SD){
-        .gdpcap <- SD$gdpcap
-        .gdprate <- SD$gdpr
-        .delta <- rep(NA,length(SD$gdpr))
-        .gdpcap_tm1 <- .gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap nocc in 2019
-        .ref_temp <- SD$temp[1] # reftemp is baseline temp for BHM and temp_tm1 for DJO
-        for (i in seq_along(c(fyears))) {
-          if (dmg_ref == "") {.ref_temp <- SD$basetemp[i]}
-          .delta[i] <- warming_effect(SD$temp[i], .ref_temp, .gdpcap_tm1, nid)
-          .gdprate[i] <- (SD$gdpr[i] + .delta[i])
-          .gdpcap[i] <- .gdpcap_tm1 * (1 + .gdprate[i])
-          .gdpcap_tm1 <- .gdpcap[i]
-          .ref_temp <- SD$temp[i]
-        }
-        return(list(year = fyears, 
-                    gdpcap = .gdpcap,
-                    gdprate = .gdprate,
-                    delta = .delta))
-      }
-      
-      project_gdpcap_cc_pulse <- function(SD){
-        .gdpcap <- SD$gdpcap
-        .gdprate <- SD$gdpr
-        .delta <- rep(NA,length(SD$gdpr))
-        .gdpcap_tm1 <- .gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap nocc in 2019
-        .ref_temp <- SD$temp[1] # reftemp is baseline temp for BHM and temp_tm1 for DJO
-        for (i in seq_along(c(fyears))) {
-          if (dmg_ref == "") {.ref_temp <- SD$basetemp[i]}
-          .delta[i] <- warming_effect(SD$temp_pulse[i], .ref_temp, .gdpcap_tm1, nid)
-          .gdprate[i] <- (SD$gdpr[i] + .delta[i])
-          .gdpcap[i] <- .gdpcap_tm1 * (1 + .gdprate[i])
-          .gdpcap_tm1 <- .gdpcap[i]
-          .ref_temp <- SD$temp[i]
-        }
-        return(list(year = fyears, 
-                    gdpcap = .gdpcap,
-                    gdprate = .gdprate,
-                    delta = .delta))
-      }
       
       # Project all scenarios
       project_gdpcap <- function(SD){

@@ -10,6 +10,9 @@ K. Ricke, L. Drouet, K. Caldeira and M. Tavoni,
 DOI: 10.1038/s41558-018-0282-y.
 Other materials are available at https://country-level-scc.github.io.
 
+Modifications of this were made by R. Lamboll and L. Blocke, allowing more 
+options to be made and more economic results to be analysed and plotted. 
+
 The main script is `generate_cscc.R`
 
 An example is provided by `country-level-social-cost-of-carbon.Rmd`

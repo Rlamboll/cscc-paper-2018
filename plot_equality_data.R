@@ -291,9 +291,10 @@ if (type_str == "neg_growth_"){
   }
   library("rnaturalearth")
   library("rnaturalearthdata")
-  world <- ne_countries(scale = "medium", returnclass = "sf")
+  world <- ne_countries(scale = "large", returnclass = "sf")
   world <- merge(world, results_sum, by.x="adm0_a3", by.y="Group.1", all=TRUE)
   target_crs <- '+proj=eqearth +wktext'
+  theme_set(theme_bw())
   ggplot(data = world) + geom_sf(aes(fill=value)) + coord_sf(crs = target_crs) +
     scale_fill_viridis_c(option = "inferno",  name = "Negative growth fraction") + 
     theme(legend.title = element_text(size = 12, angle = 90), legend.title.align = 0.5)
