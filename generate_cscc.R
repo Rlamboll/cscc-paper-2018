@@ -34,7 +34,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s SSP4 -c RCP60 -e 1 -f djo -m cmip6")
+  opts <- docopt(doc, "-s SSP4 -c rcp60 -e 1 -f djo -m cmip6")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -232,6 +232,7 @@ for (.rcp in rcps){
         valid_models = valid_models[valid_models!="CIESM"]
         ctemp = ctemp[model %in% valid_models]
         etemp = ctemp[,.(temp=mean(temp)),by=c("rcp","ISO3","year")]
+        stopifnot(nrow(ctemp)>1)
       }
       
       if (dmg_func == "bootstrap" & clim == "ensemble") {
