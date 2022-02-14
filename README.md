@@ -18,10 +18,12 @@ The main script is `generate_cscc.R`
 An example is provided by `country-level-social-cost-of-carbon.Rmd`
 
 ## Dependencies
-Packages: haven, docopt, countrycode, stringr
+Packages: haven, docopt, countrycode, stringr, dplyr, tidyr, ggplot2, stringr
 Other files: Burke, Hsiang, Miguel 2015 data needs to be ported into the 
 "data\BurkeHsiangMiguel2015_Replication\data\input" folder, available 
 from https://purl.stanford.edu/wb587wt4560
+Country-level CMIP6 data is required to run in CMIP6 mode and needs to be ported
+into 
 
 
 ## Changelog
@@ -35,3 +37,8 @@ v2 (18-01-2019)
 
 v2.5 (07/12/2020)
 * Update README to include details of libraries required
+
+v3.0 (in progress)
+* Updates allowing inequality variables to be calculated 
+* option to calculate with CMIP6 runs
+* basic tests added
