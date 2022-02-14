@@ -17,7 +17,6 @@ options:
  -r <runid> Bootstart run for the damage function parameter, 0 is estimates (0<=id<=1000)
  -p <type>  projection type (constant (default),horizon2100)
  -l <clim>  climate models (ensemble (default), mean[-ensemble])
- -e <eta>   elasticity of marginal utility of consumption. eta is 1 (default) or 2
  -o         does not allow for out-of-sample damage prediction (default, allows)
  -d         rich/poor damage function specification (default, pooled)
  -a         5-lag damage function specification (default, 0-lag)
@@ -34,7 +33,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s SSP4 -c rcp60 -e 1 -f djo -m cmip6")
+  opts <- docopt(doc, "-s all -c all -f djo -m cmip6")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -77,12 +76,6 @@ if (is.null(opts[["l"]])) {
     dmg_func = "bootstrap"
     runid = 1:1000
   }
-}
-
-if (is.null(opts[["e"]])){ # default RRA is 1 
-  etas = c(1)
-} else {
-  etas = c(as.double(opts[["e"]]))
 }
 
 if (is.null(opts[["f"]])) {
@@ -200,149 +193,153 @@ if (cmip == "cmip5") {
 
 for (.rcp in rcps){
   for (ssp in ssps){
-    if ((paste0(substr(ssp, 4,4), substr(.rcp, 4, nchar(.rcp))) %in% accepted_combos) | decouple_cmip6) {
-      # Print simulation parameters
-      print(paste("SSP: ",ssp))
-      print(paste("RCP: ",.rcp))
-      print(paste("dmg_func: ",dmg_func))
-      print(paste("last year: ",very_last_year))
-      print(paste("prefix dir: ",preffdir))
-      print(paste("climate ensemble: ",clim))
-      print(paste("impulse year: ",impulse_year))
-      print(paste("projection post2100: ",project_val))
-      print(paste("out_of_sample: ",out_of_sample))
-      print(paste("richpoor: ",rich_poor))
-      print(paste("LR (lag5): ", lag5))
-      print(paste("damage function:",dmg_ref))
-      
-      if (cmip == "cmip6") {
-        if (decouple_cmip6){
-          ctemplocs = all_ctemps$rcp == .rcp
-          if (length(unique(all_ctemps[ctemplocs]$ssp)) > 1){
-            # In the rare case there are multiple options, default towards 
-            # smaller SSPS
-            climate_ssp = min(all_ctemps[ctemplocs]$ssp)
-            ctemplocs = all_ctemps$rcp == .rcp & all_ctemps$ssp == climate_ssp
-          }
-        } else {
-          ctemplocs = all_ctemps$rcp == .rcp & all_ctemps$ssp == substr(ssp, 4, 4)
+    # Check that the rcp/ssp data exists (or that we don't care)
+    if (!((paste0(substr(ssp, 4,4), substr(.rcp, 4, nchar(.rcp))) %in% accepted_combos) | 
+          decouple_cmip6)) {
+      disp(paste0("No data available for  ", ssp, " ", .rcp))
+      next
+    }
+    # Print simulation parameters
+    print(paste("SSP: ",ssp))
+    print(paste("RCP: ",.rcp))
+    print(paste("dmg_func: ",dmg_func))
+    print(paste("last year: ",very_last_year))
+    print(paste("prefix dir: ",preffdir))
+    print(paste("climate ensemble: ",clim))
+    print(paste("impulse year: ",impulse_year))
+    print(paste("projection post2100: ",project_val))
+    print(paste("out_of_sample: ",out_of_sample))
+    print(paste("richpoor: ",rich_poor))
+    print(paste("LR (lag5): ", lag5))
+    print(paste("damage function:",dmg_ref))
+    
+    if (cmip == "cmip6") {
+      if (decouple_cmip6){
+        ctemplocs = all_ctemps$rcp == .rcp
+        if (length(unique(all_ctemps[ctemplocs]$ssp)) > 1){
+          # In the rare case there are multiple options, default towards 
+          # smaller SSPS
+          climate_ssp = min(all_ctemps[ctemplocs]$ssp)
+          ctemplocs = all_ctemps$rcp == .rcp & all_ctemps$ssp == climate_ssp
         }
-        ctemp = all_ctemps[ctemplocs, .SD, .SDcols = !c("ssp")]
-        valid_models = unique(ctemp[year==2100]$model)
-        valid_models = valid_models[valid_models!="CIESM"]
-        ctemp = ctemp[model %in% valid_models]
-        etemp = ctemp[,.(temp=mean(temp)),by=c("rcp","ISO3","year")]
-        stopifnot(nrow(ctemp)>1)
+      } else {
+        ctemplocs = all_ctemps$rcp == .rcp & all_ctemps$ssp == substr(ssp, 4, 4)
       }
+      ctemp = all_ctemps[ctemplocs, .SD, .SDcols = !c("ssp")]
+      valid_models = unique(ctemp[year==2100]$model)
+      valid_models = valid_models[valid_models!="CIESM"]
+      ctemp = ctemp[model %in% valid_models]
+      etemp = ctemp[,.(temp=mean(temp)),by=c("rcp","ISO3","year")]
+      stopifnot(nrow(ctemp)>1)
+    }
+    
+    if (dmg_func == "bootstrap" & clim == "ensemble") {
+      ddd = file.path(resboot,paste0(ssp,"-",.rcp))
+      filename = file.path(ddd,paste0("store_scc_",project_val,"_",runid,dmg_ref,".RData"))
+      if (file.exists(filename)) {
+        stop("already computed")
+      }
+    }
+    
+    print(Sys.time() - t0)
+    
+    # All combination of models available (CC x GCM for each RCP)
+    ssp_cmip_models_temp <- ctemp[rcp == .rcp,unique(model)]
+    model_comb <- cpulse[ISO3 == "USA" & mid_year == 0.5 & 
+                           model %in% ssp_cmip_models_temp, 
+                         .(model,ccmodel)]
+    
+    # Future years
+    fyears <- impulse_year:2100
+    
+    # Impulse year
+    cpulse[,year := mid_year - 0.5 + fyears[1]]
+    epulse[,year := mid_year - 0.5 + fyears[1]]
+    
+    # Project all scenarios
+    project_gdpcap <- function(SD){
+      .gdpcap <- SD$gdpcap
+      .gdpcap_cc <- SD$gdpcap
+      .gdpcap_imp <- SD$gdpcap
       
-      if (dmg_func == "bootstrap" & clim == "ensemble") {
-        ddd = file.path(resboot,paste0(ssp,"-",.rcp))
-        filename = file.path(ddd,paste0("store_scc_",project_val,"_",runid,dmg_ref,".RData"))
-        if (file.exists(filename)) {
-          stop("already computed")
+      .gdprate_cc <- SD$gdpr
+      
+      .gdpcap_tm1 <- .gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap nocc in 2019
+      .gdpcap_tm1_cc <- .gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap nocc in 2019
+      .gdpcap_tm1_imp <- .gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap nocc in 2019
+      
+      .ref_temp <- SD$temp[1] # reftemp is baseline temp for BHM and temp_tm1 for DJO
+      if (!reftemplastyear) {.ref_temp <- SD$basetemp[1]}
+      
+      for (i in seq_along(c(fyears))) {
+        # No climate change
+        .gdpcap[i] <- .gdpcap_tm1 * (1 + SD$gdpr[i])
+        .gdpcap_tm1 <- .gdpcap[i]
+        # With climate change
+        .gdprate_cc[i] <- SD$gdpr[i] + warming_effect(SD$temp[i], .ref_temp, .gdpcap_tm1_cc, nid, out_of_sample)
+        .gdpcap_cc[i] <- .gdpcap_tm1_cc * (1 + .gdprate_cc[i])
+        .gdpcap_tm1_cc <- .gdpcap_cc[i]
+        # With climate change and pulse
+        .gdpcap_imp[i] <- .gdpcap_tm1_imp * (1 + (SD$gdpr[i] + warming_effect(
+          SD$temp_pulse[i], .ref_temp, .gdpcap_tm1_imp, nid, out_of_sample)))
+        .gdpcap_tm1_imp <- .gdpcap_imp[i]
+        if (reftemplastyear) {.ref_temp <- SD$temp[i]}
+      }
+      return(list(year = fyears, 
+                  gdpcap = .gdpcap,
+                  gdpcap_cc = .gdpcap_cc,
+                  gdpcap_imp = .gdpcap_imp,
+                  gdprate_cc = .gdprate_cc
+      ))
+    }
+
+    project_gdpcap_cc_dice <- function(SD){
+      .gdp <- SD$gdp # gdp in billions of 2005 USD
+      .gdprate_cc <- rep(NA, length(SD$gdp))
+      .delta_cc <- rep(NA,length(SD$gdp))
+      .delta_imp <- rep(NA,length(SD$gdp))
+      .gdp_damages_cc <- rep(NA,length(SD$gdp))
+      .gdp_netto_cc <- rep(NA,length(SD$gdp))
+      .gdp_damages_imp <- rep(NA,length(SD$gdp))
+      .gdp_netto_imp <- rep(NA,length(SD$gdp))
+      .gdprate_cc[1] <- SD$gdpr[1]
+      # basetemp is temp_history from 1900 until 2020 + temp in 2020 so reftemp is from 2020
+      .ref_temp <- SD$temp[1]
+      for (i in seq_along(c(fyears))){
+        .gdp_base = SD$gdp[i]
+        .delta_cc[i] <- warming_effect(SD$temp[i], .ref_temp, .gdp_base, nid, out_of_sample=T, temp_history)
+        # damages for climate change
+        # Damages = Ygross * damfrac in bllions of USD per year
+        .gdp_damages_cc[i] <- (.gdp_base * .delta_cc[i])
+        # Ynet = Ygross * (damage function) output net in billions of USD per year
+        .gdp_netto_cc[i] <- (.gdp_base * (1 - .delta_cc[i]))
+        # damages for impulse temp
+        .delta_imp[i] <- warming_effect(SD$temp_pulse[i], .ref_temp, .gdp_base, nid, out_of_sample=T, temp_history)
+        .gdp_damages_imp[i] <- (.gdp_base * .delta_imp[i])
+        .gdp_netto_imp[i] <- (.gdp_base  * (1 - .delta_imp[i]))
+        
+        .gdp_base <- .gdp[i]
+        # calculate gdprate_cc
+        if (i > 1){
+          .gdprate_cc[i] <- (.gdp_netto_cc[i] / .gdp_netto_cc[i-1]) -1
         }
       }
-      
-      print(Sys.time() - t0)
-      
-      # All combination of models available (CC x GCM for each RCP)
-      ssp_cmip_models_temp <- ctemp[rcp == .rcp,unique(model)]
-      model_comb <- cpulse[ISO3 == "USA" & mid_year == 0.5 & 
-                             model %in% ssp_cmip_models_temp, 
-                           .(model,ccmodel)]
-      
-      # Future years
-      fyears <- impulse_year:2100
-      
-      # Impulse year
-      cpulse[,year := mid_year - 0.5 + fyears[1]]
-      epulse[,year := mid_year - 0.5 + fyears[1]]
-      
-      # Project all scenarios
-      project_gdpcap <- function(SD){
-        .gdpcap <- SD$gdpcap
-        .gdpcap_cc <- SD$gdpcap
-        .gdpcap_imp <- SD$gdpcap
-        
-        .gdprate_cc <- SD$gdpr
-        
-        .gdpcap_tm1 <- .gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap nocc in 2019
-        .gdpcap_tm1_cc <- .gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap nocc in 2019
-        .gdpcap_tm1_imp <- .gdpcap[1]/(1 + SD$gdpr[1]) # gdpcap nocc in 2019
-        
-        .ref_temp <- SD$temp[1] # reftemp is baseline temp for BHM and temp_tm1 for DJO
-        if (!reftemplastyear) {.ref_temp <- SD$basetemp[1]}
-        
-        for (i in seq_along(c(fyears))) {
-          # No climate change
-          .gdpcap[i] <- .gdpcap_tm1 * (1 + SD$gdpr[i])
-          .gdpcap_tm1 <- .gdpcap[i]
-          # With climate change
-          .gdprate_cc[i] <- SD$gdpr[i] + warming_effect(SD$temp[i], .ref_temp, .gdpcap_tm1_cc, nid, out_of_sample)
-          .gdpcap_cc[i] <- .gdpcap_tm1_cc * (1 + .gdprate_cc[i])
-          .gdpcap_tm1_cc <- .gdpcap_cc[i]
-          # With climate change and pulse
-          .gdpcap_imp[i] <- .gdpcap_tm1_imp * (1 + (SD$gdpr[i] + warming_effect(
-            SD$temp_pulse[i], .ref_temp, .gdpcap_tm1_imp, nid, out_of_sample)))
-          .gdpcap_tm1_imp <- .gdpcap_imp[i]
-          if (reftemplastyear) {.ref_temp <- SD$temp[i]}
-        }
-        return(list(year = fyears, 
-                    gdpcap = .gdpcap,
-                    gdpcap_cc = .gdpcap_cc,
-                    gdpcap_imp = .gdpcap_imp,
-                    gdprate_cc = .gdprate_cc
-        ))
-      }
-  
-      project_gdpcap_cc_dice <- function(SD){
-        .gdp <- SD$gdp # gdp in billions of 2005 USD
-        .gdprate_cc <- rep(NA, length(SD$gdp))
-        .delta_cc <- rep(NA,length(SD$gdp))
-        .delta_imp <- rep(NA,length(SD$gdp))
-        .gdp_damages_cc <- rep(NA,length(SD$gdp))
-        .gdp_netto_cc <- rep(NA,length(SD$gdp))
-        .gdp_damages_imp <- rep(NA,length(SD$gdp))
-        .gdp_netto_imp <- rep(NA,length(SD$gdp))
-        .gdprate_cc[1] <- SD$gdpr[1]
-        # basetemp is temp_history from 1900 until 2020 + temp in 2020 so reftemp is from 2020
-        .ref_temp <- SD$temp[1]
-        for (i in seq_along(c(fyears))){
-          .gdp_base = SD$gdp[i]
-          .delta_cc[i] <- warming_effect(SD$temp[i], .ref_temp, .gdp_base, nid, out_of_sample=T, temp_history)
-          # damages for climate change
-          # Damages = Ygross * damfrac in bllions of USD per year
-          .gdp_damages_cc[i] <- (.gdp_base * .delta_cc[i])
-          # Ynet = Ygross * (damage function) output net in billions of USD per year
-          .gdp_netto_cc[i] <- (.gdp_base * (1 - .delta_cc[i]))
-          # damages for impulse temp
-          .delta_imp[i] <- warming_effect(SD$temp_pulse[i], .ref_temp, .gdp_base, nid, out_of_sample=T, temp_history)
-          .gdp_damages_imp[i] <- (.gdp_base * .delta_imp[i])
-          .gdp_netto_imp[i] <- (.gdp_base  * (1 - .delta_imp[i]))
-          
-          .gdp_base <- .gdp[i]
-          # calculate gdprate_cc
-          if (i > 1){
-            .gdprate_cc[i] <- (.gdp_netto_cc[i] / .gdp_netto_cc[i-1]) -1
-          }
-        }
-        return(list(year = fyears,
-                    gdpcap = .gdp,
-                    gdpcap_cc = .gdp_netto_cc,
-                    gdpcap_imp = .gdp_netto_imp,
-                    gdp_damages_cc = .gdp_damages_cc,
-                    gdp_damages_imp = .gdp_damages_imp,
-                    gdprate_cc = .gdprate_cc
-        ))
-      }
-      
+      return(list(year = fyears,
+                  gdpcap = .gdp,
+                  gdpcap_cc = .gdp_netto_cc,
+                  gdpcap_imp = .gdp_netto_imp,
+                  gdp_damages_cc = .gdp_damages_cc,
+                  gdp_damages_imp = .gdp_damages_imp,
+                  gdprate_cc = .gdprate_cc
+      ))
+    }
+
+    for (.eta in c(1, 2)) {
       lcscc = NULL
       lwscc = NULL
       leq_wscc = NULL
       leri_eq_wscc = NULL
-      
       for (nid in runid) {
-        
         # Create dataset for SSP
         # ISO3 x model x ccmodel x years
         #View(growthrate)
@@ -485,19 +482,13 @@ for (.rcp in rcps){
         # based on Table 3.2 in IPCC AR5 WG2 Chapter 3
         # added 3% prtp to be compatible with EPA
         prtps = c(0, 1, 2, 3) # %
-        if(any(size(etas) > 1)) {
-          stop("Global equality weighting breaks down with multiple values of eta")
-        }
-        
         cscc = NULL
         for (.prtp in prtps) {
-          for (.eta in etas) {
             dscc = res_scc[,list(ISO3,model_id,year,gdprate_cc_avg,scc)]
             dscc[,dfac := (1/(1 + .prtp/100 + .eta * gdprate_cc_avg)^(year - impulse_year))]
             dscc[,dscc := dfac * scc]
             cscc = rbind(cscc,dscc[,.(prtp = .prtp,eta = .eta,scc = sum(dscc)),
                                    by = c("ISO3","model_id")],fill = T)
-          }
         }
         wscc = cscc[,list(scc = sum(scc)),by = c("prtp","eta","model_id")]
     
@@ -530,8 +521,7 @@ for (.rcp in rcps){
                          fill = T)
         weighted_cscc0 = merge(x = cscc0, y = weights[, c("ISO3", "weight")], by="ISO3")
         eq_wscc = rbindlist(list(eq_wscc, weighted_cscc0[,.(scc = sum(scc * weight)),
-                                                         by = c("dr","model_id")]),
-                            fill = T)
+            by = c("dr","model_id")]), fill = T)
         
         print(Sys.time() - t0)
   
@@ -643,8 +633,6 @@ for (.rcp in rcps){
       print(paste(poor_prefer_10_filename,"saved"))
       
       print(Sys.time() - t0)
-    } else {
-      disp(paste0("No data available for  ", ssp, " ", .rcp))
     }
   }
 }
