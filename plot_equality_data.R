@@ -7,8 +7,10 @@ library(dplyr)
 
 
 # This file plots results from the generate_cscc.R file
-# The outputs can be either "eri_eq_statscc_2020d" (GSCC relative to the income of an Eritrean),
-# or "poor_pref_10dollars" (income at which donation is preferable to SCC) 
+# The outputs can be one of: 
+# "eri_eq_statscc_2020d" (GSCC relative to the income of an Eritrean),
+# "poor_pref_10dollars" (income at which donation is preferable to SCC) 
+# "neg_growth_" (map of countries with the fraction of scenarios in which they experience negative growth)
 
 # Input values in options should correspond with files in the results folder for -e, -r and -f.
 
@@ -19,21 +21,21 @@ usage: plot_equality_data.R [-e <eta> -v <ver> -t <type> -r <rcp> -s <ssp> -p <p
 options:
  -e Eta value used in the model (1, 2 or 1:2 (default))
  -v Version number to name the plotted figure
- -t Type of string and plot (either poor_pref_10dollars (default) or eri_eq_statscc_2020d)
+ -t Type of string and plot: poor_pref_10dollars (default), eri_eq_statscc_2020d or neg_growth_ to plot 
  -r Plot rcp scenario (4.5, 6.0, 8.5 or all (default))
  -s SSP baseline (all(default), 1, 2,..., 5. ))
  -p Projection type. (constant (default), horizon2100, all)
  -c Check in order to do a test
- -f Damage functions (default=bhm (Burke et al.), djo (Dell et al.), dice, nice 
-    (if additional data has been imported). Separate these options by commas)
+ -f Damage functions (default=bhm (Burke et al.), djo (Dell et al.), djo_lag1, dice, and nice 
+    (if additional data has been imported from NICE). Separate these options by commas)
  -m cmip version. (cmip5 (default), cmip6, cmip6_all, both)' -> my_doc
 
-#my_opts <- docopt(my_doc, "-e 1 -v v4 -t poor_pref_10dollars -r 6.0,4.5,8.5 -f bhm") # Default case
-#my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -v v7 -r all -s all -f djo,bhm,nice -m cmip6_all") 
-my_opts <- docopt(my_doc, "-e 1 -t neg_growth_ -v v8 -r all -s all -f bhm -m cmip6") 
-#my_opts <- docopt(my_doc, "-e 1 -t poor_pref_10dollars -r 8.5 -s 3 -f dice,bhm,dice,nice") 
-#my_opts <- docopt(my_doc, "-e 1,2 -t poor_pref_10dollars -r all -s all -f bhm,djo,dice") 
-#my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -r all -s all -f bhm,djo,dice")
+#my_opts <- docopt(my_doc, "-e 1 -v v4 -t poor_prexf_10dollars -r 6.0,4.5,8.5 -f bhm") # Default case
+my_opts <- docopt(my_doc, "-e 1,2 -t neg_growth_ -v v9 -r all -s all -f dice,bhm,djo -m cmip6_all") 
+#my_opts <- docopt(my_doc, "-e 1 -t neg_growth_ -v v8 -r all -s all -f bhm -m cmip6_all") 
+#my_opts <- docopt(my_doc, "-e 1 -t poor_pref_10dollars -r 8.5 -s 3 -f dice,bhm,djo,nice") 
+#my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -r all -s all -f bhm,djo,dice") 
+#my_opts <- docopt(my_doc, "-e 1,2 -t neg_growth_ -r all -s all -f bhm,djo,dice")
 #my_opts <- docopt(my_doc)
 
 # unpack variables from the options
@@ -51,8 +53,7 @@ if (is.null(my_opts[["e"]]) | my_opts[["e"]] == "1,2"){ # default RRA is 1 and 2
 
 if (is.null(my_opts[["v"]])) {
   version_string = "" # no version number if there is no input for -v
-} else{ version_string = as.character(my_opts[["v"]])
-}
+} else { version_string = as.character(my_opts[["v"]])}
 all_cmip6_scen = FALSE
 if (is.null(my_opts[["m"]])) {
   cmips=c("")
@@ -92,8 +93,12 @@ if ((is.null(my_opts[["p"]]) || my_opts[["p"]]== "all")){
   variable_timeframe = c("constant", "horizon2100")
 } else if (my_opts[["p"]]== "horizon2100"){
   variable_timeframe = c("horizon2100")
-} else {variable_timeframe = c("constant")}  
-  
+} else if (my_opts[["p"]]== "constant"){
+  variable_timeframe = c("constant")
+} else {
+  stop("Invalid timeframe (p) option")
+}
+
 if (!is.null(my_opts[["c"]])){
   test = TRUE
   results_dir = "/results_test"
@@ -111,23 +116,21 @@ if (is.null(my_opts[["f"]])) {
 # Conversion factor
 dollar_val_2020 = 1.35
   
-subfolder = if (all_cmip6_scen)""
-  
 namefun <- function(x, y, z, timeframe, cmip, subfolder){
   paste0(results_dir, "/res_statbhm_30C/", subfolder, type_str, "SSP", x, "_rcp", y, 
          "_", timeframe, "_estimates_climensemble_", "eta_", z, cmip, ".RData") 
 }
-namefun_altdamage <- function(x, y, z, cmip, subfolder){
-    paste0(results_dir, "/res_statdjo_richpoor/", subfolder, type_str, "SSP", x, "_rcp", y,
-         "_constant_estimates_climensemble_djo_", "eta_", z, cmip, ".RData")
+namefun_altdamage <- function(x, y, z, cmip, subfolder, djotype){
+    paste0(results_dir, "/res_stat", djotype, "_richpoor/", subfolder, type_str, "SSP", x, "_rcp", y,
+         "_constant_estimates_climensemble_", djotype, "_eta_", z, cmip, ".RData")
 }
 namefun_nocut <- function(x, y, z, timeframe, cmip, subfolder){
   paste0(results_dir, "/res_statbhm/", subfolder, type_str, "SSP", x, "_rcp", y, 
          "_", timeframe, "_estimates_climensemble_", "eta_", z, cmip, ".RData") 
 }
-namefun_dice <- function(x, y, z, cmip, subfolder){
-  paste0(results_dir, "/res_statdice/", subfolder, type_str, "SSP", x, "_rcp", y, 
-        "_constant_estimates_climensemble_dice_", "eta_", z, cmip, ".RData") 
+namefun_dice <- function(x, y, z, timeframe, cmip, subfolder){
+  paste0(results_dir, "/res_statdice/", subfolder, type_str, "SSP", x, "_rcp", y,
+        "_", timeframe, "_estimates_climensemble_dice_", "eta_", z, cmip, ".RData")
 }
 filelist=c()
 
@@ -137,10 +140,14 @@ if (all_cmip6_scen){
   subfolder=""
 }
 for (cmip in cmips){
+  
   if (grepl("djo", dmg_f)){
+    if (grepl("djo_lag1", dmg_f)) {djo_form <- "djo_lag1"} else {djo_form <- "djo"}
     for (y in variable_rcp){
       for (z in variable_risk){
-        filelist2 = lapply(ssp_plot, namefun_altdamage, y=y, z=z, cmip=cmip, subfolder=subfolder)
+        filelist2 = lapply(
+            ssp_plot, namefun_altdamage, y=y, z=z, cmip=cmip, subfolder=subfolder, djotype=djo_form
+          )
         filelist=c(filelist, filelist2)
       }
     }
@@ -171,11 +178,13 @@ for (cmip in cmips){
   if (grepl("dice", dmg_f)){
     for (y in variable_rcp){
       for (z in variable_risk){
-        filelist2 = lapply(ssp_plot, namefun_dice, y=y, z=z, cmip=cmip, subfolder=subfolder)
-        filelist=c(filelist, filelist2)
+        for (timeframe in variable_timeframe){
+          filelist2 = lapply(ssp_plot, namefun_dice, y=y, z=z, timeframe=timeframe, cmip=cmip, subfolder=subfolder)
+          filelist=c(filelist, filelist2)
+        }
       }
     }
-  }  
+  }
 }
 
 results_table <- data.table(cmip=character(), ssp=integer(), rcp=numeric(), eta=numeric(), PRTP=numeric(), 
@@ -279,6 +288,14 @@ if (grepl("nice", dmg_f)){
       results_table = rbind(results_table, nice_results_table)
     } else {
       results_table = rbind(results_table, nice_results_table)
+      nice_compare <- nice_data[nice_data$whose=="independent", ]
+      nice_compare$cmip = cmip
+      nice_compare$PRTP = nice_compare$prtp
+      nice_compare$damages = damages=rep(nicenames[fileind], len_nice)
+      nice_compare$indicator = "mean"
+      nice_compare$value = nice_compare$scc
+      nice_compare = nice_compare[, colnames(compare_results)]
+      compare_results <- rbind(compare_results, nice_compare)
     }
   }
 }
@@ -291,16 +308,18 @@ if (type_str == "neg_growth_"){
   }
   library("rnaturalearth")
   library("rnaturalearthdata")
-  world <- ne_countries(scale = "large", returnclass = "sf")
+  world <- ne_countries(scale = "small", returnclass = "sf")
   world <- merge(world, results_sum, by.x="adm0_a3", by.y="Group.1", all=TRUE)
   target_crs <- '+proj=eqearth +wktext'
   theme_set(theme_bw())
-  ggplot(data = world) + geom_sf(aes(fill=value)) + coord_sf(crs = target_crs) +
-    scale_fill_viridis_c(option = "inferno",  name = "Negative growth fraction") + 
-    theme(legend.title = element_text(size = 12, angle = 90), legend.title.align = 0.5)
+  plotdif <- ggplot(data = world) + geom_sf(aes(fill=value), color="#FEAFF1") + coord_sf(crs = target_crs) +
+    scale_fill_viridis_c(option = "inferno",  name="Fraction of scenarios    ", limits=c(0,1)) + 
+    theme(legend.title = element_text(size = 14), 
+          legend.key.width = unit(2.2, "cm"), legend.position = "bottom")
+  plotdif
   
-  savediffig = paste0(type_str, damages, version_string, cmip, ".png")
-  ggsave(path="plots", filename=savediffig) 
+  savediffig = paste0(type_str, dmg_f, version_string, cmip, ".png")
+  ggsave(path="plots", filename=savediffig)
   
   
 } else {
@@ -310,7 +329,7 @@ if (type_str == "neg_growth_"){
       title="World SCC relative to the average Eritrean ($)",
       fill="Inequality aversion"
     ) 
-    plot_ylab = ylab("World SCC relative to the average Eritrean ($)") 
+    plot_ylab = ylab("World SCC relative to the average Eritrean ($)")
   } else if(type_str == "poor_pref_10dollars"){
     plot_labs = labs(
       title="Income at which $10 cash is preferable to a ton CO2",
@@ -332,7 +351,6 @@ if (type_str == "neg_growth_"){
   )
   if (type_str != "eri_eq_statscc_2020d"){
     plot = plot + geom_hline(yintercept=1.9*365)
-    plot = plot + geom_hline(yintercept=500, color="red")
   } else if (type_str == "poor_pref_10dollars") {
     plot = plot + geom_hline(yintercept=10)
   }
@@ -349,7 +367,7 @@ if (type_str == "neg_growth_"){
   ggsave(path="plots", filename=savefig)
   print(paste0("Saved ", savefig))
   
-  if (type_str == "eri_eq_statscc_2020d" & !(grepl("nice", dmg_f))){
+  if (type_str == "eri_eq_statscc_2020d"){
     combined_data = results_table
     combined_data$ratio = compare_results$value / results_table$value
     combined_data$no_ineq = compare_results$value
@@ -357,7 +375,7 @@ if (type_str == "neg_growth_"){
       alpha=0.9, size=3
     ) + facet_grid(PRTP+eta~damages, labeller = label_axes) + 
       scale_y_continuous(trans = "log2") + scale_x_continuous(trans = "log2") + ylab(
-        "Summed country cost of carbon ($)") + xlab("World SCC to average Eritrean ($)")
+        "Summed regional cost of carbon ($)") + xlab("World SCC to average Eritrean ($)")
     plotdif
     savediffig = paste0(type_str, "InequalityAlteration", version_string, cmip, ".png")
     ggsave(path="plots", filename=savediffig)

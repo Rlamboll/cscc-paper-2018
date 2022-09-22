@@ -14,9 +14,14 @@ require(MASS)
 
 mu = c(0,-1.655145)
 mb = matrix(mu,nrow=1)
+if (dmg_ref == "djo_lag1") {
+  g_rich <- function(temp, rid) { return(0.341 / 100 * temp) }
+  g_poor <- function(temp, rid) { return(-1.096 / 100 * temp) }  
+} else{
+  g_rich <- function(temp, rid) { return(-0.261 / 100 * temp) }
+  g_poor <- function(temp, rid) { return(-1.394 / 100 * temp) }  
+}
 
-g_rich <- function(temp, rid) { return(-0.191 / 100 * temp) }
-g_poor <- function(temp, rid) { return(-1.041 / 100 * temp) }
 
 if(F){
   xx = seq(-0.5,1.5,by=0.1)
