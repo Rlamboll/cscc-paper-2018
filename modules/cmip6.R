@@ -4,7 +4,7 @@
 # Also, if this file fails during the first run, it is possible to recover 
 # workings results instead of re-initialising all_ctemp
 
-saveloc = "./data/cmip6/all_ctemp_calced_single1900_first.Rdata"
+saveloc = "./data/cmip6/all_ctemp_calced_single1980_all.Rdata"
 if(file.exists(saveloc)){
   load(saveloc)
 } else{
@@ -16,21 +16,20 @@ if(file.exists(saveloc)){
   library(stringr)
   
   # Alter the start date to get earlier info
-  startdate = 1900
+  startdate = 1980
   
   # Load popweighted country temperature increase
   files = Sys.glob(file.path("data","cmip6","20210416_*.feather"))
-  temp_file = "./data/cmip6/temp_processing_workings_cmip6_1900_first.Rdata"
+  temp_file = "./data/cmip6/temp_processing_workings_cmip6_1980_all.Rdata"
   # Either initialise the list of data or load the previous results and start 
-  # from a higher fileblocki by uncommenting one of the lines below. 
+  # from a higher fileblock by incrementing the line below to exceed whichever 
+  # block was successfully loaded before.
   
   all_ctemp = list()
-  #load(temp_file)
   fileblockstart = 1
+  if (fileblockstart != 1) {load(temp_file)}
   
-  scenario_counter = data.frame(matrix(ncol = 2, nrow = 0))
-  colnames(scenario_counter) = c("scenario", "count")
-  fileblocklength = 8
+  fileblocklength = 7
   for (fileblocki in c(fileblockstart:ceiling(length(files) / fileblocklength))){
     for (f in files[c((1+(fileblocki - 1) * fileblocklength) : (fileblocki*fileblocklength))]) {
       if (is.na(f)) {break}
@@ -38,23 +37,17 @@ if(file.exists(saveloc)){
       # Load sample temp from one model [temperatures have to be adjusted to baseline]
       temp = read_feather(f, as_data_frame = TRUE)
       scens = unique(temp$scenario)
-      for (scen in as.vector(scens)) {
-        if (scen %in% scenario_counter$scenario) {
-          scenario_counter$count[scenario_counter$scenario == scen] = 1 + as.numeric(
-            scenario_counter$count[scenario_counter$scenario == scen])
-        } else {
-          scenario_counter[nrow(scenario_counter)+1,] = c(scen, 1)
-        }
-      }
+      
       print("File catalogued")
       countrypref = 'Popn weighted World\\|Natural Earth 50m\\|'
-      desiredCols = c(colnames(temp)[1:11], sapply(c(startdate:2101), toString))
+      desiredCols = c(colnames(temp)[1:11], sapply(c(startdate:2100), toString))
       temp2 = as.data.table(temp[, desiredCols])
       rm(temp)
-      ctemp = melt(temp2, id.vars=c("region", "scenario", "climate_model"),
+      ctemp = melt(temp2, id.vars=c("region", "scenario", "climate_model", "member_id"),
                    measure.vars=paste(startdate:2100),
                    variable.name="year",value.name="temperature",
                    variable.factor = F)
+      ctemp[, climate_model := paste0(climate_model, "*", substr(member_id, start=2, stop=2))]
       ctemp = aggregate(temperature~region+scenario+climate_model+year, ctemp, head, 1)
       print("File loaded")
       ctemp = dplyr::filter(ctemp, grepl(countrypref, region))
@@ -105,7 +98,7 @@ if(file.exists(saveloc)){
       all_ctemp = c(all_ctemp,list(ctemp))
       rm(ctemp)
     }
-    save.image(temp_file)
+    save(all_ctemp, file=temp_file)
     print(paste0("~~~~~~~~~~~~~ Completed file block #", fileblocki, " ~~~~~~~~~~~~~~~"))
   }
     all_ctemp = rbindlist(all_ctemp)

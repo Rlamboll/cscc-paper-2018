@@ -33,7 +33,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s all -c all -f djo -m cmip6_all")
+  opts <- docopt(doc, "-s all -c all -f bhm -m cmip6_all")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
