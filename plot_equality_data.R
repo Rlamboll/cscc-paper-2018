@@ -26,12 +26,12 @@ options:
  -s SSP baseline (all(default), 1, 2,..., 5. ))
  -p Projection type. (constant (default), horizon2100, all)
  -c Check in order to do a test
- -f Damage functions (default=bhm (Burke et al.), djo (Dell et al.), djo_lag1, dice, and nice 
+ -f Damage functions (default=bhm (Burke et al.), djo (Dell et al.), djo_lag1, dice, kw and nice 
     (if additional data has been imported from NICE). Separate these options by commas)
  -m cmip version. (cmip5 (default), cmip6, cmip6_all, both)' -> my_doc
 
 #my_opts <- docopt(my_doc, "-e 1 -v v4 -t poor_prexf_10dollars -r 6.0,4.5,8.5 -f bhm") # Default case
-my_opts <- docopt(my_doc, "-e 1,2 -t neg_growth_ -v v9 -r all -s all -f dice,bhm,djo -m cmip6_all") 
+my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -v v11 -r all -s all -f bhm,kw,dice  -m cmip6_all") 
 #my_opts <- docopt(my_doc, "-e 1 -t neg_growth_ -v v8 -r all -s all -f bhm -m cmip6_all") 
 #my_opts <- docopt(my_doc, "-e 1 -t poor_pref_10dollars -r 8.5 -s 3 -f dice,bhm,djo,nice") 
 #my_opts <- docopt(my_doc, "-e 1,2 -t eri_eq_statscc_2020d -r all -s all -f bhm,djo,dice") 
@@ -128,9 +128,9 @@ namefun_nocut <- function(x, y, z, timeframe, cmip, subfolder){
   paste0(results_dir, "/res_statbhm/", subfolder, type_str, "SSP", x, "_rcp", y, 
          "_", timeframe, "_estimates_climensemble_", "eta_", z, cmip, ".RData") 
 }
-namefun_dice <- function(x, y, z, timeframe, cmip, subfolder){
-  paste0(results_dir, "/res_statdice/", subfolder, type_str, "SSP", x, "_rcp", y,
-        "_", timeframe, "_estimates_climensemble_dice_", "eta_", z, cmip, ".RData")
+namefun_damfn <- function(x, y, z, timeframe, cmip, subfolder, damstr){
+  paste0(results_dir, "/res_stat", damstr, "/", subfolder, type_str, "SSP", x, "_rcp", y,
+        "_", timeframe, "_estimates_climensemble_", damstr, "_eta_", z, cmip, ".RData")
 }
 filelist=c()
 
@@ -155,16 +155,18 @@ for (cmip in cmips){
   
   if (grepl("bhm", dmg_f)){
     dir_30C <- str_sub(results_dir, 2, str_length(results_dir))
-    if (dir.exists(paste0(dir_30C, "/res_statbhm_30C"))){
-      for (y in variable_rcp){
-        for (z in variable_risk){
-          for (timeframe in variable_timeframe){
-            filelist2 = lapply(ssp_plot, namefun, y=y, z=z, timeframe=timeframe, cmip=cmip, subfolder=subfolder) 
-            filelist=c(filelist, filelist2)
-          }
-        }
-      }
-    } 
+    
+    # if (dir.exists(paste0(dir_30C, "/res_statbhm_30C"))){
+    #   for (y in variable_rcp){
+    #     for (z in variable_risk){
+    #       for (timeframe in variable_timeframe){
+    #         filelist2 = lapply(ssp_plot, namefun, y=y, z=z, timeframe=timeframe, cmip=cmip, subfolder=subfolder) 
+    #         filelist=c(filelist, filelist2)
+    #       }
+    #     }
+    #   }
+    # } 
+    
     for (y in variable_rcp){
       for (z in variable_risk){
         for (timeframe in variable_timeframe){
@@ -174,13 +176,14 @@ for (cmip in cmips){
       }
     }
   }
-  
-  if (grepl("dice", dmg_f)){
-    for (y in variable_rcp){
-      for (z in variable_risk){
-        for (timeframe in variable_timeframe){
-          filelist2 = lapply(ssp_plot, namefun_dice, y=y, z=z, timeframe=timeframe, cmip=cmip, subfolder=subfolder)
-          filelist=c(filelist, filelist2)
+  for (damstr in c("dice", "kw")){
+    if (grepl(damstr, dmg_f)){
+      for (y in variable_rcp){
+        for (z in variable_risk){
+          for (timeframe in variable_timeframe){
+            filelist2 = lapply(ssp_plot, namefun_damfn, y=y, z=z, timeframe=timeframe, cmip=cmip, subfolder=subfolder, damstr=damstr)
+            filelist=c(filelist, filelist2)
+          }
         }
       }
     }
@@ -199,7 +202,7 @@ for (file in filelist) {
   sspnum = as.numeric(substr(strsplit(file, split = "SSP")[[1]][2], 1, 1))
   rcpnum = substr(strsplit(file, split = "rcp")[[1]][2], 1, 2)
   rcpnum = sub("(.{1})(.*)", "\\1.\\2", rcpnum)
-  damages = if(grepl("djo", file)) "Dell" else if(grepl("dice", file)) "Dice" else (
+  damages = if(grepl("djo", file)) "Dell" else if(grepl("dice", file)) "Dice" else if(grepl("_kw_", file)) "Kalkuhl" else (
     if (grepl("horizon2100", file)) "Burke 2100" else "Burke 2200")
   if (grepl("_30C", file)){
     damages = str_c(damages, " 30C")
@@ -325,6 +328,7 @@ if (type_str == "neg_growth_"){
 } else {
   
   if(type_str == "eri_eq_statscc_2020d"){
+    results_table = results_table[PRTP != 1]
     plot_labs = labs(
       title="World SCC relative to the average Eritrean ($)",
       fill="Inequality aversion"
@@ -347,7 +351,7 @@ if (type_str == "neg_growth_"){
   results_table$SSP <- factor(results_table$ssp)
   plot = ggplot(results_table, aes(x=rcp, y=value, color=SSP))+geom_point(
     alpha=0.9, size=2
-  ) + plot_labs + plot_ylab + xlab("RCP pathway") + facet_grid(PRTP+eta~damages , labeller = label_axes
+  ) + plot_labs + plot_ylab + xlab("RCP pathway") + facet_grid(PRTP+eta~damages, labeller = label_axes
   )
   if (type_str != "eri_eq_statscc_2020d"){
     plot = plot + geom_hline(yintercept=1.9*365)
@@ -369,8 +373,8 @@ if (type_str == "neg_growth_"){
   
   if (type_str == "eri_eq_statscc_2020d"){
     combined_data = results_table
-    combined_data$ratio = compare_results$value / results_table$value
-    combined_data$no_ineq = compare_results$value
+    combined_data$ratio = compare_results[PRTP!=1]$value / results_table$value
+    combined_data$no_ineq = compare_results[PRTP!=1]$value
     plotdif = ggplot(combined_data, aes(x=value, y=no_ineq, color=SSP, shape=rcp)) + geom_point(
       alpha=0.9, size=3
     ) + facet_grid(PRTP+eta~damages, labeller = label_axes) + 
@@ -400,11 +404,12 @@ if (type_str == "neg_growth_"){
     }
     doublecmipdataw = pivot_wider(doublecmipdata, names_from=cmip, values_from=value)
     plotdif = ggplot(doublecmipdataw, aes(x=cmip5, y=cmip6)) + geom_point() + 
-      geom_abline(slope=1) + xlab("CMIP5 World SCC relative to the average Eritrean (2020 USD") + scale_x_continuous(trans = "log2") +
-      ylab("CMIP6 World SCC relative to the average Eritrean (2020 USD") + scale_y_continuous(trans = "log2") + 
+      geom_abline(slope=1) + xlab("CMIP5 World SCC relative to the average Eritrean (2020 USD)") + scale_x_continuous(trans = "log2") +
+      ylab("CMIP6 World SCC relative to the average Eritrean (2020 USD)") + scale_y_continuous(trans = "log2") + 
       theme(text = element_text(size=15))
     plotdif
     savediffig = paste0(type_str, "Plots", version_string, cmip, ".png")
     ggsave(path="plots", filename=savediffig)
   }
 }
+

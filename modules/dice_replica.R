@@ -14,9 +14,8 @@ temp_anomaly <- temp_csv[Year %in% anomaly_years]
 # find increase of temperature from 1900 to 2020 by taking the difference of the anomalies
 temp_history <- as.numeric(temp_anomaly[Year == 2020, "J-D"][[1]]) - as.numeric(temp_anomaly[Year == 1900, "J-D"][[1]])
 
-warming_effect <- function(temp, temp_prev, gdp_tm1, nid, out_of_sample=T, temp_history){
+warming_effect <- function(temp, temp_prev, temp_history){
   # temperature increase since 1900. temp_history is global T increase, from 2020 is national increase
-  t_diff = temp_history + (temp - temp_prev)
-  damcoeff = 0.00236 * (t_diff) ^2
+  damcoeff = 0.00236 * (temp_history + (temp - temp_prev)) ^2
   return(damcoeff)  # Damages as fraction of gross output
 }
