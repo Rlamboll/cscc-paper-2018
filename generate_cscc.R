@@ -20,7 +20,7 @@ options:
  -o         does not allow for out-of-sample damage prediction (default, allows)
  -d         rich/poor damage function specification (default, pooled)
  -a         5-lag damage function specification (default, 0-lag)
- -f <name>  damage function (default=bhm (Burke et al.), djo (Dell et al.)), djo_lag1, dice (Nordhaus)
+ -f <name>  damage function (default=bhm (Burke et al.), djo (Dell et al.)), djo_lag1, dice (Nordhaus), kw (Kalkuhl et al 2020)
  -m <cmip>  Use results from either cmip5 (default) or cmip6. Can also use cmip6_all to 
             decouple ssp and rcp in cmip6 experiments (returns results for all ssp/rcp combos, 
             irrespective of whether or not this is possible to achieve)
@@ -33,7 +33,7 @@ options:
 
 # set options
 if (!exists("generate_test")){
-  opts <- docopt(doc, "-s all -c all -f bhm -m cmip6_all")
+  opts <- docopt(doc, "-s all -c all -f kw -m cmip6_all")
   #opts <- docopt(doc, "-s all -c all -f djo")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 1 -w -a -d")
   #opts <- docopt(doc, "-s SSP2 -c rcp60 -r 0 -l mean -w -a -d")
@@ -165,8 +165,12 @@ if (dmg_ref == "") {
   source("modules/bhm_replica.R")
 } else if (dmg_ref == "_dice"){
   source("modules/dice_replica.R")
-} else {
+} else if (dmg_ref == "_djo") {
   source("modules/djo_replica.R")
+} else if (dmg_ref == "_kw"){
+  source("modules/kalkuhl_replica.R")
+} else{
+  stop
 }
 if (cmip == "cmip5") {
   source("modules/cmip5.R")
@@ -312,21 +316,25 @@ for (.rcp in rcps){
       .ref_temp <- SD$temp[1]
       for (i in seq_along(c(fyears))){
         .gdp_base = SD$gdp[i]
-        .delta_cc[i] <- warming_effect(SD$temp[i], .ref_temp, .gdp_base, nid, out_of_sample=T, temp_history)
+        if (dmg_ref == "_kw"){
+          .delta_cc[i] <- warming_effect(SD$temp[i], SD$temp[max(1, i-1)], SD$temp[max(1, i-2)], .ref_temp)
+          .delta_imp[i] <- warming_effect(SD$temp_pulse[i], SD$temp_pulse[max(1, i-1)], SD$temp_pulse[max(1, i-2)], .ref_temp)
+        } else {
+          .delta_cc[i] <- warming_effect(SD$temp[i], .ref_temp, temp_history=temp_history)
+          .delta_imp[i] <- warming_effect(SD$temp_pulse[i], .ref_temp, temp_history=temp_history)
+        }
         # damages for climate change
         # Damages = Ygross * damfrac in bllions of USD per year
         .gdp_damages_cc[i] <- (.gdp_base * .delta_cc[i])
         # Ynet = Ygross * (damage function) output net in billions of USD per year
         .gdp_netto_cc[i] <- (.gdp_base * (1 - .delta_cc[i]))
-        # damages for impulse temp
-        .delta_imp[i] <- warming_effect(SD$temp_pulse[i], .ref_temp, .gdp_base, nid, out_of_sample=T, temp_history)
         .gdp_damages_imp[i] <- (.gdp_base * .delta_imp[i])
         .gdp_netto_imp[i] <- (.gdp_base  * (1 - .delta_imp[i]))
         
         .gdp_base <- .gdp[i]
         # calculate gdprate_cc
         if (i > 1){
-          .gdprate_cc[i] <- (.gdp_netto_cc[i] / .gdp_netto_cc[i-1]) -1
+          .gdprate_cc[i] <- (.gdp_netto_cc[i] / .gdp_netto_cc[i-1]) - 1
         }
       }
       return(list(year = fyears,
@@ -377,7 +385,7 @@ for (.rcp in rcps){
       setkey(ssp_gdpr,model_id,ISO3)
       print(Sys.time() - t0)
 
-      if (dmg_ref == "_dice") {
+      if (dmg_ref == "_dice" | dmg_ref == "_kw") {
         ssp_gdp <- gdp_yearly[SSP == ssp & year %in% fyears] # gdp in billions of USD
         ssp_gdp <- merge(ssp_gdpr, ssp_gdp, by = c("year","ISO3"))
         res_sccdice <- ssp_gdp[,project_gdpcap_cc_dice(.SD),by = c("model_id","ISO3")]
@@ -386,7 +394,7 @@ for (.rcp in rcps){
         popyear <- pop[SSP == ssp,approx(year,pop,fyears), by = c("SSP","ISO3")] # population in millions
         colnames(popyear) <- c("SSP", "ISO3", "year", "pop")
         
-        # converting GDP and GDP damges to gdp per capitan and damages per capita
+        # converting GDP and GDP damages to gdp per capita and damages per capita
         gdpcap_yearly <- merge(popyear, res_sccdice, by = c("ISO3","year"))
         gdpcap_yearly[, gdpcap := gdpcap/pop*1e3] # as gdp is in billions but population in millions, do *1e3 to get dollars
         gdpcap_yearly[, gdp_damages_cc := gdp_damages_cc/pop*1e3]
@@ -394,7 +402,8 @@ for (.rcp in rcps){
         gdpcap_yearly[, gdp_damages_imp := gdp_damages_imp/pop*1e3]
         gdpcap_yearly[, gdpcap_imp := gdpcap_imp/pop*1e3]
         res_scc <- setcolorder(gdpcap_yearly, 
-          c("ISO3", "year", "model_id","gdpcap", "gdpcap_cc", "gdpcap_imp","gdprate_cc", "gdp_damages_cc","gdp_damages_imp", "SSP", "pop"))
+          c("ISO3", "year", "model_id","gdpcap", "gdpcap_cc", "gdpcap_imp",
+            "gdprate_cc", "gdp_damages_cc","gdp_damages_imp", "SSP", "pop"))
       } else {
         res_scc <- ssp_gdpr[,project_gdpcap(.SD),by = c("model_id","ISO3")]
         # yearly population
@@ -543,101 +552,103 @@ for (.rcp in rcps){
         lcscc = c(lcscc, list(cscc[, .(scc, ID)]))
         lwscc = c(lwscc, list(wscc[, .(scc, ID)]))
         leq_wscc = c(leq_wscc, list(eq_wscc[, .(scc, ID)]))
-      }
-      
-      cscc = rbindlist(lcscc)
-      wscc = rbindlist(lwscc)
-      eq_wscc = rbindlist(leq_wscc)
-      
-      dollar_val_2020 = 1.35
-      eq_wscc$scc = dollar_val_2020 * eq_wscc$scc
-      eri_eq_wscc = eq_wscc
-      eri_eq_wscc$scc = eri_eq_wscc$scc/weights[ISO3 == "ERI"]$weight
-      
-      store_scc <- rbind(cscc, wscc)
-      store_scc_flat <- split(store_scc$scc, store_scc$ID)
-      store_eq_wscc_flat <- split(eq_wscc$scc, eq_wscc$ID)
-      store_eri_eq_wscc_flat <- split(eri_eq_wscc$scc, eri_eq_wscc$ID)
-      
-      print(Sys.time() - t0)
-      
-      compute_stat <- function(.data) {
-        res <- c(list(mean = mean(.data)),
-                 as.list(quantile(.data, probs = c(
-                   0.1, 0.25, 0.5, 0.75, 0.9
-                 ))))
-        return(as.data.table(res))
-      }
-      
-      # Bayesian bootstrap to check quality of statistics
-      #lapply(store_scc_flat, bayesboot, mean)
-      
-      if (save_raw_data) {
-        dir.create(file.path(resdir), recursive = T, showWarnings = F)
-        filename = file.path(resdir,paste0(
+        
+        
+        cscc = rbindlist(lcscc)
+        wscc = rbindlist(lwscc)
+        eq_wscc = rbindlist(leq_wscc)
+        
+        dollar_val_2020 = 1.35
+        eq_wscc$scc = dollar_val_2020 * eq_wscc$scc
+        eri_eq_wscc = eq_wscc
+        eri_eq_wscc$scc = eri_eq_wscc$scc/weights[ISO3 == "ERI"]$weight
+        
+        store_scc <- rbind(cscc, wscc)
+        store_scc_flat <- split(store_scc$scc, store_scc$ID)
+        store_eq_wscc_flat <- split(eq_wscc$scc, eq_wscc$ID)
+        store_eri_eq_wscc_flat <- split(eri_eq_wscc$scc, eri_eq_wscc$ID)
+        
+        print(Sys.time() - t0)
+        
+        compute_stat <- function(.data) {
+          res <- c(list(mean = mean(.data)),
+                   as.list(quantile(.data, probs = c(
+                     0.1, 0.25, 0.5, 0.75, 0.9
+                   ))))
+          return(as.data.table(res))
+        }
+        
+        # Bayesian bootstrap to check quality of statistics
+        #lapply(store_scc_flat, bayesboot, mean)
+        
+        if (save_raw_data) {
+          dir.create(file.path(resdir), recursive = T, showWarnings = F)
+          filename = file.path(resdir,paste0(
             "raw_scc_",ssp,"_",.rcp,"_",project_val,"_",dmg_func,"_clim",clim,dmg_ref,"_",cmip,".RData"
           )
-        )
-        save(store_scc_flat, file = filename)
-      }
-      eq_stat_wscc <-  rbindlist(lapply(store_eq_wscc_flat, compute_stat))
-      eq_stat_wscc$ID <- names(store_eq_wscc_flat)
-      if (cmip=="cmip6") {
-        cmipstr = paste0("_cmip6") 
-      } else {
-        cmipstr = ""
-      }
-      if (dmg_func == "estimates" | clim == "mean") {
-        stat_scc <- rbindlist(lapply(store_scc_flat, compute_stat))
-        stat_scc$ID <- names(store_scc_flat)
-        dir.create(file.path(resdir), recursive = T, showWarnings = F)
-        savestring = paste0(
-          ssp,"_",.rcp,"_",project_val,"_",dmg_func,"_clim",clim,dmg_ref,"_eta_",.eta, cmipstr,".RData"
-        )
-        filename = file.path(resdir,paste0("statscc_",savestring))
-        save(stat_scc, file = filename)
+          )
+          save(store_scc_flat, file = filename)
+        }
+        eq_stat_wscc <-  rbindlist(lapply(store_eq_wscc_flat, compute_stat))
+        eq_stat_wscc$ID <- names(store_eq_wscc_flat)
+        if (cmip=="cmip6") {
+          cmipstr = paste0("_cmip6") 
+        } else {
+          cmipstr = ""
+        }
+        if (dmg_func == "estimates" | clim == "mean") {
+          stat_scc <- rbindlist(lapply(store_scc_flat, compute_stat))
+          stat_scc$ID <- names(store_scc_flat)
+          dir.create(file.path(resdir), recursive = T, showWarnings = F)
+          savestring = paste0(
+            ssp,"_",.rcp,"_",project_val,"_",dmg_func,"_clim",clim,dmg_ref,"_eta_",.eta, cmipstr,".RData"
+          )
+          filename = file.path(resdir,paste0("statscc_",savestring))
+          save(stat_scc, file = filename)
+          print(paste(filename,"saved"))
+        } else {
+          ddd = file.path(resboot,paste0(ssp,"-",.rcp))
+          dir.create(ddd, recursive = T, showWarnings = F)
+          savestring = paste0(
+            ssp,"_",.rcp,"_",project_val,"_",dmg_func,"_clim", clim, dmg_ref,"_eta_",.eta, cmipstr," .RData"
+          )
+          filename = file.path(ddd,paste0("store_scc_",savestring))
+          save(store_scc_flat, file = filename)
+          print(paste(filename,"saved"))
+        }
+        # Also save the negative growth statistics
+        filename = file.path(resdir,paste0("neg_growth_",savestring))
+        save(neg_growth, file = filename)
         print(paste(filename,"saved"))
-      } else {
-        ddd = file.path(resboot,paste0(ssp,"-",.rcp))
-        dir.create(ddd, recursive = T, showWarnings = F)
-        savestring = paste0(
-          ssp,"_",.rcp,"_",project_val,"_",dmg_func,"_clim", clim, dmg_ref,"_eta_",.eta, cmipstr," .RData"
+        
+        eq_stat_wscc <-  rbindlist(lapply(store_eq_wscc_flat, compute_stat))
+        eq_stat_wscc$ID <- names(store_eq_wscc_flat)
+        eri_eq_stat_wscc <-  rbindlist(lapply(store_eri_eq_wscc_flat, compute_stat))
+        eri_eq_stat_wscc$ID <- names(store_eri_eq_wscc_flat)
+        eq_filename = file.path(resdir,paste0("eq_statscc_2020d",savestring))
+        eri_eq_filename = file.path(resdir,paste0("eri_eq_statscc_2020d",savestring))
+        save(eq_stat_wscc, file = eq_filename)
+        print(paste(eq_filename,"saved"))
+        save(eri_eq_stat_wscc, file = eri_eq_filename)
+        print(paste(eri_eq_filename,"saved"))
+        
+        # Calculate the income level at which it is preferable to give to the poor than to avert 
+        # CO2 at $10/ton. 
+        poorpref_fn <- function(.wscc) {
+          mean_gdp_per_cap_world * (10/.wscc)^(1/.eta)
+        }
+        poor_prefer_10 <- as.data.frame(
+          sapply(subset(eq_stat_wscc, select=names(eq_stat_wscc)[names(eq_stat_wscc) != "ID"]),FUN=poorpref_fn)
         )
-        filename = file.path(ddd,paste0("store_scc_",savestring))
-        save(store_scc_flat, file = filename)
-        print(paste(filename,"saved"))
+        
+        poor_prefer_10$ID <- eq_stat_wscc$ID
+        poor_prefer_10_filename = file.path(resdir,paste0("poor_pref_10dollars",savestring))
+        save(poor_prefer_10, file = poor_prefer_10_filename)
+        print(paste(poor_prefer_10_filename,"saved"))
+        
+        print(Sys.time() - t0)
+        
       }
-      # Also save the negative growth statistics
-      filename = file.path(resdir,paste0("neg_growth_",savestring))
-      save(neg_growth, file = filename)
-      print(paste(filename,"saved"))
-      
-      eq_stat_wscc <-  rbindlist(lapply(store_eq_wscc_flat, compute_stat))
-      eq_stat_wscc$ID <- names(store_eq_wscc_flat)
-      eri_eq_stat_wscc <-  rbindlist(lapply(store_eri_eq_wscc_flat, compute_stat))
-      eri_eq_stat_wscc$ID <- names(store_eri_eq_wscc_flat)
-      eq_filename = file.path(resdir,paste0("eq_statscc_2020d",savestring))
-      eri_eq_filename = file.path(resdir,paste0("eri_eq_statscc_2020d",savestring))
-      save(eq_stat_wscc, file = eq_filename)
-      print(paste(eq_filename,"saved"))
-      save(eri_eq_stat_wscc, file = eri_eq_filename)
-      print(paste(eri_eq_filename,"saved"))
-      
-      # Calculate the income level at which it is preferable to give to the poor than to avert 
-      # CO2 at $10/ton. 
-      poorpref_fn <- function(.wscc) {
-        mean_gdp_per_cap_world * (10/.wscc)^(1/.eta)
-      }
-      poor_prefer_10 <- as.data.frame(
-        sapply(subset(eq_stat_wscc, select=names(eq_stat_wscc)[names(eq_stat_wscc) != "ID"]),FUN=poorpref_fn)
-      )
-
-      poor_prefer_10$ID <- eq_stat_wscc$ID
-      poor_prefer_10_filename = file.path(resdir,paste0("poor_pref_10dollars",savestring))
-      save(poor_prefer_10, file = poor_prefer_10_filename)
-      print(paste(poor_prefer_10_filename,"saved"))
-      
-      print(Sys.time() - t0)
     }
   }
 }
